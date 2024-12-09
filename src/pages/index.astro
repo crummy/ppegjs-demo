@@ -9,19 +9,6 @@ const examples = (await getCollection("examples")).map(c => c.data)
 <script>
     import {ppeg} from "ppegjs/index.js"
 
-    window.dingus = {
-        eg: () => {
-            const eg = document.getElementById('examples'),
-                grammar = document.getElementById('grammar'),
-                input = document.getElementById('input');
-            grammar.textContent = document.getElementById(eg.value + '-grammar').textContent,
-                input.textContent = document.getElementById(eg.value + '-input').textContent;
-            dingus.run();
-        },
-    }
-
-    const firstExample = examples[0]
-
     window.load = () => {
         const selected = document.getElementById<HTMLSelectElement>('examples').value
         const option = document.getElementById(`option-${selected}`)
