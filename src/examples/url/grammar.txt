@@ -1,0 +1,9 @@
+# Equivalent to the regular expression for
+# well-formed URI's in RFC 3986.
+URI     = (scheme ':')? ('//' auth)?
+          path ('?' query)? ('#' frag)?
+scheme  = ~[:/?#]+
+auth    = ~[/?#]*
+path    = ~[?#]*
+query   = ~'#'*
+frag    = ~[ \t\n\r]*

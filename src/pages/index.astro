@@ -1,11 +1,125 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+import {getCollection} from "astro:content"
+
+const examples = (await getCollection("examples")).map(c => c.data)
 ---
 
+<script>
+    import {ppeg} from "ppegjs/index.js"
+
+    window.dingus = {
+        eg: () => {
+            const eg = document.getElementById('examples'),
+                grammar = document.getElementById('grammar'),
+                input = document.getElementById('input');
+            grammar.textContent = document.getElementById(eg.value + '-grammar').textContent,
+                input.textContent = document.getElementById(eg.value + '-input').textContent;
+            dingus.run();
+        },
+    }
+
+    const firstExample = examples[0]
+
+    window.load = () => {
+        const selected = document.getElementById<HTMLSelectElement>('examples').value
+        const option = document.getElementById(`option-${selected}`)
+        const grammar = option.dataset.grammar
+        const input = option.dataset.input
+        document.getElementById('grammar').textContent = grammar;
+        document.getElementById('input').textContent = input;
+        window.run()
+    }
+
+    window.run = () => {
+        const grammar = document.getElementById('grammar')
+        const parser = ppeg.compile(grammar.textContent)
+        const input = document.getElementById('input')
+        const parse = parser.parse(input.innerText) //textContent),
+        const output = document.getElementById('output');
+        if (parse.ok) output.textContent = parse.show_ptree(); // TODO json?
+        else output.textContent = parse.show_err();
+    }
+
+    window.load()
+</script>
+
 <Layout>
-	<Welcome />
+    <style>
+        .box {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .grammar, .input, .output {
+            flex: auto;
+            width: 400px;
+            margin: 2px;
+            border: thin solid gray;
+        }
+
+        .header {
+            position: relative;
+            top: 0;
+            height: 20px;
+            padding: 5px;
+            border-bottom: thin solid gray;
+            background: whitesmoke;
+        }
+
+        .header > button {
+            float: right;
+        }
+
+        .header > .examples {
+            float: right;
+        }
+
+        #grammar, #input, #output {
+            position: relative;
+            height: 250px;
+            font-family: "Courier Line Draw", "Courier Prime", "Courier New", monospace;
+            white-space: pre-wrap;
+            margin: 2px;
+            padding: 5px;
+            resize: both;
+            overflow: auto;
+        }
+    </style>
+    <h1>pPEG Dingus</h1>
+
+    <div class='box'>
+        <div class='grammar'>
+            <div class='bag'>
+                <div class='header'>
+                    <label for="grammar">Grammar</label>
+                    <span class='examples'>
+                <label for="examples">Examples: </label>
+                <select name="examples" id="examples" onchange="load()">
+                    {examples.map(({title, grammar, input}) =>
+                            <option id={`option-${title}`} value={title} data-grammar={grammar} data-input={input}>{title}</option>)}
+                </select>
+                </span>
+                </div>
+                <div id='grammar' contenteditable='true'></div>
+            </div>
+        </div>
+        <div class='input'>
+            <div class='bag'>
+                <div class='header'>
+                    <label for="input">Input</label>
+                    <button onclick="run()">Parse..</button>
+                </div>
+                <div id='input' contenteditable='true'></div>
+            </div>
+        </div>
+        <div class='output'>
+            <div class='bag'>
+                <div class='header'>Parse Tree</div>
+                <div id='output'></div>
+            </div>
+        </div>
+    </div>
+    <div>Copyright 2024</div>
 </Layout>
