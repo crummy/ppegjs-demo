@@ -25,7 +25,8 @@ const examples = (await getCollection("examples")).map(c => c.data)
         const input = document.getElementById('input')
         const parse = parser.parse(input.innerText) //textContent),
         const output = document.getElementById('output');
-        if (parse.ok) output.textContent = parse.show_ptree(); // TODO json?
+        const showJson = document.getElementById<HTMLCheckboxElement>('json').checked
+        if (parse.ok) output.textContent = parse.show_ptree(showJson);
         else output.textContent = parse.show_err();
     }
 
@@ -93,6 +94,11 @@ const examples = (await getCollection("examples")).map(c => c.data)
             overflow-y: auto;
         }
 
+        .json {
+            display: flex;
+            align-items: center;
+        }
+
         @media (max-width: 768px) {
             body {
                 grid-template-areas:
@@ -139,7 +145,12 @@ const examples = (await getCollection("examples")).map(c => c.data)
         <div id='input' contenteditable='true'></div>
     </div>
     <div class='output'>
-        <div class='header'>Parse Tree</div>
+        <div class='header'>Parse Tree
+            <label class="json">
+                JSON
+                <input type="checkbox" id="json" name="json" onchange="run()">
+            </label>
+        </div>
         <div id='output'></div>
     </div>
     <div class="footer">Copyright 2024</div>
