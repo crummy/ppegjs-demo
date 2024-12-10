@@ -7,7 +7,7 @@ const examples = (await getCollection("examples")).map(c => c.data)
 ---
 
 <script>
-    import {ppeg} from "ppegjs/index.js"
+    import {ppeg} from "ppegjs"
 
     window.load = () => {
         const selected = document.getElementById<HTMLSelectElement>('examples').value
@@ -34,79 +34,113 @@ const examples = (await getCollection("examples")).map(c => c.data)
 
 <Layout>
     <style>
-        .box {
-            display: flex;
-            flex-wrap: wrap;
+        body {
+            display: grid;
+            grid-template-areas:
+                "title   title  title"
+                "grammar input  output"
+                "footer  footer footer";
+            grid-template-rows: auto 1fr auto;
+            grid-template-columns: 3fr 2fr 2fr;
+            width: 100%;
+            height: 100vh;
+            padding: 1em;
+            gap: 0.5em;
+            box-sizing: border-box;
+        }
+
+        .title {
+            grid-area: title;
+        }
+
+        .grammar {
+            grid-area: grammar;
+        }
+
+        .input {
+            grid-area: input;
+        }
+
+        .output {
+            grid-area: output;
+        }
+
+        .footer {
+            grid-area: footer;
         }
 
         .grammar, .input, .output {
-            flex: auto;
-            width: 400px;
-            margin: 2px;
+            display: grid;
+            grid-template-rows: auto 1fr;
             border: thin solid gray;
+            min-height: 0; // necessary to prevent divs from growing below screen
         }
 
         .header {
-            position: relative;
-            top: 0;
             height: 20px;
             padding: 5px;
             border-bottom: thin solid gray;
             background: whitesmoke;
-        }
-
-        .header > button {
-            float: right;
-        }
-
-        .header > .examples {
-            float: right;
+            display: flex;
+            justify-content: space-between;
         }
 
         #grammar, #input, #output {
-            position: relative;
-            height: 250px;
             font-family: "Courier Line Draw", "Courier Prime", "Courier New", monospace;
             white-space: pre-wrap;
             margin: 2px;
             padding: 5px;
-            resize: both;
-            overflow: auto;
+            overflow-y: auto;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                grid-template-areas:
+                    "title"
+                    "grammar"
+                    "input"
+                    "output"
+                    "footer";
+                grid-template-columns: 1fr;
+            }
+
+            /**inputs should no longer be scrollable**/
+            #grammar, #input, #output {
+                overflow-y: visible;
+            }
+
+            /**instead, they should grow**/
+            .grammar, .input, .output {
+                min-height: auto;
+            }
         }
     </style>
-    <h1>pPEG Dingus</h1>
+    <h1 class="title">pPEG Dingus</h1>
 
-    <div class='box'>
-        <div class='grammar'>
-            <div class='bag'>
-                <div class='header'>
-                    <label for="grammar">Grammar</label>
-                    <span class='examples'>
+    <div class='grammar'>
+        <div class='header'>
+            <label for="grammar">Grammar</label>
+            <span class='examples'>
                 <label for="examples">Examples: </label>
                 <select name="examples" id="examples" onchange="load()">
                     {examples.map(({title, grammar, input}) =>
-                            <option id={`option-${title}`} value={title} data-grammar={grammar} data-input={input}>{title}</option>)}
+                            <option id={`option-${title}`} value={title} data-grammar={grammar}
+                                    data-input={input}>{title}</option>)}
                 </select>
                 </span>
-                </div>
-                <div id='grammar' contenteditable='true'></div>
-            </div>
         </div>
-        <div class='input'>
-            <div class='bag'>
-                <div class='header'>
-                    <label for="input">Input</label>
-                    <button onclick="run()">Parse..</button>
-                </div>
-                <div id='input' contenteditable='true'></div>
-            </div>
-        </div>
-        <div class='output'>
-            <div class='bag'>
-                <div class='header'>Parse Tree</div>
-                <div id='output'></div>
-            </div>
-        </div>
+        <div id='grammar' contenteditable='true'></div>
     </div>
-    <div>Copyright 2024</div>
+    <div class='input'>
+        <div class='header'>
+            <label for="input">Input</label>
+            <button onclick="run()">Parse..</button>
+        </div>
+        <div id='input' contenteditable='true'></div>
+    </div>
+    <div class='output'>
+        <div class='header'>Parse Tree</div>
+        <div id='output'></div>
+    </div>
+    <div class="footer">Copyright 2024</div>
 </Layout>
