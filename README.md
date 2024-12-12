@@ -1,7 +1,7 @@
 # pPEGjs Demo
 
 This repo contains an Astro project that provides a live demonstration of the
-pPEGjs parser.
+[pPEGjs](https://github.com/pcanz/pPEGjs/) parser.
 
 # Instructions
 
