@@ -1,0 +1,5 @@
+{
+  "title": "CSV",
+  "grammar": "CSV     = Hdr Row+\nHdr     = Row\nRow     = field (',' field)* '\\r'? '\\n'\nfield   = _string / _text / ''\n\n_text   = ~[,\\n\\r]+\n_string = '\"' (~[\"] / '\"\"')* '\"'\n",
+  "input": "A,B,C\na1,b1,c1\na2,\"b,2\",c2\na3,b3,c3\n"
+}

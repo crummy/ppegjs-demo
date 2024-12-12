@@ -1,7 +1,0 @@
-CSV     = Hdr Row+
-Hdr     = Row
-Row     = field (',' field)* '\r'? '\n'
-field   = _string / _text / ''
-
-_text   = ~[,\n\r]+
-_string = '"' (~["] / '""')* '"'

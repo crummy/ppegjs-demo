@@ -1,0 +1,5 @@
+{
+  "title": "JSON",
+  "grammar": "json   = _ value _\nvalue  =  Str / Arr / Obj / num / lit\nObj    = '{'_ (memb (_','_ memb)*)? _'}'\nmemb   = Str _':'_ value\nArr    = '['_ (value (_','_ value)*)? _']'\nStr    = '\"' chars* '\"'\nchars  = ~[\\u0000-\\u001F\"\\]+ / '\\' esc\nesc    = [\"\\/bfnrt] / 'u' [0-9a-fA-F]*4\nnum    = _int _frac? _exp?\n_int   = '-'? ([1-9] [0-9]* / '0')\n_frac  = '.' [0-9]+\n_exp   = [eE] [+-]? [0-9]+\nlit    = 'true' / 'false' / 'null'\n_      = [ \\t\\n\\r]*\n",
+  "input": "{\n    \"answer\": 42,\n    \"mixed\": [1, 2.3, \"a\\tstring\", true, [4, 5]],\n    \"empty\": {}\n}"
+}

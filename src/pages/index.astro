@@ -74,7 +74,7 @@ const examples = (await getCollection("examples")).map(c => c.data)
             display: grid;
             grid-template-rows: auto 1fr;
             border: thin solid gray;
-            min-height: 0; // necessary to prevent divs from growing below screen
+            min-height: 0; /** necessary to prevent divs from growing below screen **/
         }
 
         .header {
