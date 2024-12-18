@@ -9,6 +9,7 @@ export const examples = defineCollection({
         title: z.string(),
         grammar: z.string(),
         input: z.string(),
+        highlighted: z.boolean().optional()
     })
 });
 

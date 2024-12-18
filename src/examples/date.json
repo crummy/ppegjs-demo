@@ -1,5 +1,6 @@
 {
   "title": "Date",
   "grammar": "date  = year '-' month '-' day\nyear  = [1-2][0-9]*3\nmonth = '0'[1-9] / '1'[0-2]\nday   = [0-3][0-9]\n\n# A simple example to play around with.\n# More examples in menu at top.\n\n# This Dingus is only a toy web-page.\n# To try your own pPEG grammars use\n# the peg-play.mjs command line tool,\n# that lets you work on your own files.",
-  "input": "2021-02-03"
+  "input": "2021-02-03",
+  "highlighted": true
 }
