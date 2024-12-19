@@ -11,29 +11,34 @@ const initialExample = examples.find(e => e.highlighted)?.title
 <script>
     import {ppeg} from "ppegjs"
 
-    window.load = () => {
-        const selected = document.querySelector<HTMLSelectElement>('#examples')!.value
+    const examplesSelect = document.querySelector<HTMLSelectElement>('#examples')
+    if (!examplesSelect) throw new Error("No select element found")
+    const grammar = document.querySelector<HTMLDivElement>('#grammar')
+    if (!grammar) throw new Error("No grammar div found")
+    const input = document.querySelector<HTMLDivElement>('#input')
+    if (!input) throw new Error("No input div found")
+    const output = document.querySelector<HTMLDivElement>('#output')
+    if (!output) throw new Error("No output div found")
+    const jsonCheckbox = document.querySelector<HTMLInputElement>('#json')
+    if (!jsonCheckbox) throw new Error("No json checkbox found")
+
+    const load = () => {
+        const selected = examplesSelect.value
         const option = document.querySelector<HTMLOptionElement>(`#option-${selected}`)!
-        const grammar = option.dataset.grammar
-        const input = option.dataset.input
-        document.querySelector<HTMLDivElement>('#grammar')!.innerText = grammar ?? "";
-        document.querySelector<HTMLDivElement>('#input')!.innerText = input ?? "";
-        window.run()
+        grammar.innerText = option.dataset.grammar ?? "";
+        input.innerText = option.dataset.input ?? "";
+        run()
     }
 
-    window.run = () => {
-        const grammar = document.querySelector<HTMLDivElement>('#grammar')!
+    const run = () => {
         const parser = ppeg.compile(grammar.innerText)
-        const input = document.querySelector<HTMLDivElement>('#input')!
-        console.log(grammar.innerText)
         const parse = parser.parse(input.innerText)
-        const output = document.querySelector<HTMLDivElement>('#output')!;
-        const showJson = document.querySelector<HTMLInputElement>('#json')!.checked
+        const showJson = jsonCheckbox.checked
         if (parse.ok) output.textContent = parse.show_ptree(showJson);
         else output.textContent = parse.show_err();
     }
 
-    function debounce(fn: Function, delay: number = 300) {
+    const debounce = function (fn: Function, delay: number = 300) {
         let timeoutId: ReturnType<typeof setTimeout>;
 
         return function (this: any, ...args: any[]) {
@@ -42,12 +47,16 @@ const initialExample = examples.find(e => e.highlighted)?.title
             }
             timeoutId = setTimeout(() => fn.apply(this, args), delay);
         };
-    }
+    };
 
+    const autoparse = debounce(run)
 
-    window.autoparse = debounce(window.run)
+    examplesSelect.addEventListener('change', load)
+    grammar.addEventListener('input', autoparse)
+    input.addEventListener('input', autoparse)
+    jsonCheckbox.addEventListener('change', run)
 
-    window.load()
+    load()
 </script>
 
 <Layout>
@@ -146,26 +155,26 @@ const initialExample = examples.find(e => e.highlighted)?.title
             <label for="grammar">Grammar</label>
             <span class='examples'>
                 <label for="examples">Examples: </label>
-                <select name="examples" id="examples" onchange="load()">
+                <select name="examples" id="examples">
                     {examples.map(({title, grammar, input}) =>
                             <option id={`option-${title}`} value={title} data-grammar={grammar}
                                     data-input={input} selected={title == initialExample}>{title}</option>)}
                 </select>
                 </span>
         </div>
-        <div contenteditable="true" role="textbox" id='grammar' oninput="autoparse()"></div>
+        <div contenteditable="true" role="textbox" id='grammar'></div>
     </div>
     <div class='input'>
         <div class='header'>
             <label for="input">Input</label>
         </div>
-        <div contenteditable="true" role="textbox" id='input' oninput="autoparse()"></div>
+        <div contenteditable="true" role="textbox" id='input'"></div>
     </div>
     <div class='output'>
         <div class='header'>Parse Tree
             <label class="json">
                 JSON
-                <input type="checkbox" id="json" name="json" onchange="run()">
+                <input type="checkbox" id="json" name="json">
             </label>
         </div>
         <div id='output'></div>
