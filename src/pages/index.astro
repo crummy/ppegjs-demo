@@ -16,17 +16,17 @@ const initialExample = examples.find(e => e.highlighted)?.title
         const option = document.querySelector<HTMLOptionElement>(`#option-${selected}`)!
         const grammar = option.dataset.grammar
         const input = option.dataset.input
-        document.querySelector<HTMLTextAreaElement>('#grammar')!.value = grammar ?? "";
-        document.querySelector<HTMLTextAreaElement>('#input')!.value = input ?? "";
+        document.querySelector<HTMLDivElement>('#grammar')!.innerText = grammar ?? "";
+        document.querySelector<HTMLDivElement>('#input')!.innerText = input ?? "";
         window.run()
     }
 
     window.run = () => {
-        const grammar = document.querySelector<HTMLTextAreaElement>('#grammar')!
-        const parser = ppeg.compile(grammar.value)
-        const input = document.querySelector<HTMLTextAreaElement>('#input')!
-        console.log(grammar.value)
-        const parse = parser.parse(input.value)
+        const grammar = document.querySelector<HTMLDivElement>('#grammar')!
+        const parser = ppeg.compile(grammar.innerText)
+        const input = document.querySelector<HTMLDivElement>('#input')!
+        console.log(grammar.innerText)
+        const parse = parser.parse(input.innerText)
         const output = document.querySelector<HTMLDivElement>('#output')!;
         const showJson = document.querySelector<HTMLInputElement>('#json')!.checked
         if (parse.ok) output.textContent = parse.show_ptree(showJson);
@@ -125,6 +125,7 @@ const initialExample = examples.find(e => e.highlighted)?.title
                     "output"
                     "footer";
                 grid-template-columns: 1fr;
+                height: auto;
             }
 
             /**inputs should no longer be scrollable**/
@@ -152,13 +153,13 @@ const initialExample = examples.find(e => e.highlighted)?.title
                 </select>
                 </span>
         </div>
-        <textarea id='grammar' contenteditable='true' oninput="autoparse()"></textarea>
+        <div contenteditable="true" role="textbox" id='grammar' oninput="autoparse()"></div>
     </div>
     <div class='input'>
         <div class='header'>
             <label for="input">Input</label>
         </div>
-        <textarea id='input' contenteditable='true' oninput="autoparse()"></textarea>
+        <div contenteditable"true" role="textbox" id='input' oninput="autoparse()"></div>
     </div>
     <div class='output'>
         <div class='header'>Parse Tree
