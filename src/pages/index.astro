@@ -10,32 +10,34 @@ const initialExample = examples.find(e => e.highlighted)?.title
 
 <script>
     import {ppeg} from "ppegjs"
+    const DESKTOP_SIZE = 768
 
-    const examplesSelect = document.querySelector<HTMLSelectElement>('#examples')
-    if (!examplesSelect) throw new Error("No select element found")
-    const grammar = document.querySelector<HTMLDivElement>('#grammar')
-    if (!grammar) throw new Error("No grammar div found")
-    const input = document.querySelector<HTMLDivElement>('#input')
-    if (!input) throw new Error("No input div found")
-    const output = document.querySelector<HTMLDivElement>('#output')
-    if (!output) throw new Error("No output div found")
-    const jsonCheckbox = document.querySelector<HTMLInputElement>('#json')
-    if (!jsonCheckbox) throw new Error("No json checkbox found")
+    const getElement = <T extends Element>(selector: string): T => {
+        const element = document.querySelector<T>(selector);
+        if (!element) throw new Error("No element found: " + selector);
+        return element;
+    }
+
+    const examplesSelect = getElement<HTMLSelectElement>('#examples')
+    const grammar = getElement<HTMLTextAreaElement>('#grammar')
+    const input = getElement<HTMLTextAreaElement>('#input')
+    const output = getElement<HTMLTextAreaElement>('#output')
+    const jsonCheckbox = getElement<HTMLInputElement>('#json')
 
     const load = () => {
         const selected = examplesSelect.value
-        const option = document.querySelector<HTMLOptionElement>(`#option-${selected}`)!
-        grammar.innerText = option.dataset.grammar ?? "";
-        input.innerText = option.dataset.input ?? "";
+        const option = getElement<HTMLOptionElement>(`#option-${selected}`)
+        grammar.value = option.dataset.grammar ?? "";
+        input.value = option.dataset.input ?? "";
         run()
     }
 
     const run = () => {
-        const parser = ppeg.compile(grammar.innerText)
-        const parse = parser.parse(input.innerText)
+        const parser = ppeg.compile(grammar.value)
+        const parse = parser.parse(input.value)
         const showJson = jsonCheckbox.checked
-        if (parse.ok) output.textContent = parse.show_ptree(showJson);
-        else output.textContent = parse.show_err();
+        if (parse.ok) output.value = parse.show_ptree(showJson);
+        else output.value = parse.show_err();
     }
 
     const debounce = function (fn: Function, delay: number = 300) {
@@ -51,7 +53,25 @@ const initialExample = examples.find(e => e.highlighted)?.title
 
     const autoparse = debounce(run)
 
-    examplesSelect.addEventListener('change', load)
+    examplesSelect.addEventListener('change', load);
+    // A little hack to ensure the textarea heights grow with content
+    [grammar, input, output].forEach(el => el.addEventListener('input', (e) => {
+        if (document.body.clientWidth <= DESKTOP_SIZE) {
+            el.style.height = "0"
+            el.style.height = el.scrollHeight + "px"
+        }
+    }))
+    // The same code needs to run in case we resize from big to small
+    window.addEventListener("resize", () => {
+        [grammar, input, output].forEach(el => {
+            if (document.body.clientWidth <= DESKTOP_SIZE) {
+                el.style.height = "0"
+                el.style.height = el.scrollHeight + "px"
+            } else {
+                el.style.height = "auto"
+            }
+        })
+    })
     grammar.addEventListener('input', autoparse)
     input.addEventListener('input', autoparse)
     jsonCheckbox.addEventListener('change', run)
@@ -162,13 +182,13 @@ const initialExample = examples.find(e => e.highlighted)?.title
                 </select>
                 </span>
         </div>
-        <div contenteditable="true" role="textbox" id='grammar'></div>
+        <textarea id='grammar'></textarea>
     </div>
     <div class='input'>
         <div class='header'>
             <label for="input">Input</label>
         </div>
-        <div contenteditable="true" role="textbox" id='input'"></div>
+        <textarea id='input'"></textarea>
     </div>
     <div class='output'>
         <div class='header'>Parse Tree
@@ -177,7 +197,7 @@ const initialExample = examples.find(e => e.highlighted)?.title
                 <input type="checkbox" id="json" name="json">
             </label>
         </div>
-        <div id='output'></div>
+        <textarea id='output' disabled></textarea>
     </div>
     <div class="footer">Copyright 2024</div>
 </Layout>
