@@ -16,16 +16,17 @@ const initialExample = examples.find(e => e.highlighted)?.title
         const option = document.querySelector<HTMLOptionElement>(`#option-${selected}`)!
         const grammar = option.dataset.grammar
         const input = option.dataset.input
-        document.querySelector<HTMLDivElement>('#grammar')!.textContent = grammar ?? "";
-        document.querySelector<HTMLDivElement>('#input')!.textContent = input ?? "";
+        document.querySelector<HTMLTextAreaElement>('#grammar')!.value = grammar ?? "";
+        document.querySelector<HTMLTextAreaElement>('#input')!.value = input ?? "";
         window.run()
     }
 
     window.run = () => {
-        const grammar = document.querySelector<HTMLDivElement>('#grammar')!
-        const parser = ppeg.compile(grammar.textContent)
-        const input = document.querySelector<HTMLDivElement>('#input')!
-        const parse = parser.parse(input.innerText)
+        const grammar = document.querySelector<HTMLTextAreaElement>('#grammar')!
+        const parser = ppeg.compile(grammar.value)
+        const input = document.querySelector<HTMLTextAreaElement>('#input')!
+        console.log(grammar.value)
+        const parse = parser.parse(input.value)
         const output = document.querySelector<HTMLDivElement>('#output')!;
         const showJson = document.querySelector<HTMLInputElement>('#json')!.checked
         if (parse.ok) output.textContent = parse.show_ptree(showJson);
@@ -151,13 +152,13 @@ const initialExample = examples.find(e => e.highlighted)?.title
                 </select>
                 </span>
         </div>
-        <div id='grammar' contenteditable='true' oninput="autoparse()"></div>
+        <textarea id='grammar' contenteditable='true' oninput="autoparse()"></textarea>
     </div>
     <div class='input'>
         <div class='header'>
             <label for="input">Input</label>
         </div>
-        <div id='input' contenteditable='true' oninput="autoparse()"></div>
+        <textarea id='input' contenteditable='true' oninput="autoparse()"></textarea>
     </div>
     <div class='output'>
         <div class='header'>Parse Tree
