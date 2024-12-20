@@ -53,30 +53,26 @@ const initialExample = examples.find(e => e.highlighted)?.title
 
     const autoparse = debounce(run)
 
-    examplesSelect.addEventListener('change', load);
-    // A little hack to ensure the textarea heights grow with content
-    [grammar, input, output].forEach(el => el.addEventListener('input', (e) => {
+    const resize = (el: HTMLElement) => {
         if (document.body.clientWidth <= DESKTOP_SIZE) {
             el.style.height = "0"
             el.style.height = el.scrollHeight + "px"
+        } else {
+            el.style.height = "auto"
         }
-    }))
+    }
+
+    examplesSelect.addEventListener('change', load);
+    // A little hack to ensure the textarea heights grow with content
+    [grammar, input, output].forEach(el => el.addEventListener('input', () => resize(el)))
     // The same code needs to run in case we resize from big to small
-    window.addEventListener("resize", () => {
-        [grammar, input, output].forEach(el => {
-            if (document.body.clientWidth <= DESKTOP_SIZE) {
-                el.style.height = "0"
-                el.style.height = el.scrollHeight + "px"
-            } else {
-                el.style.height = "auto"
-            }
-        })
-    })
+    window.addEventListener("resize", () => [grammar, input, output].forEach(resize))
     grammar.addEventListener('input', autoparse)
     input.addEventListener('input', autoparse)
     jsonCheckbox.addEventListener('change', run)
 
-    load()
+    load();
+    [grammar, input, output].forEach(resize)
 </script>
 
 <Layout>
