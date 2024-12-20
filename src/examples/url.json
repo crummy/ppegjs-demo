@@ -1,5 +1,0 @@
-{
-  "title": "URL",
-  "grammar": "# Equivalent to the regular expression for\n# well-formed URI's in RFC 3986.\nURI     = (scheme ':')? ('//' auth)?\n          path ('?' query)? ('#' frag)?\nscheme  = ~[:/?#]+\nauth    = ~[/?#]*\npath    = ~[?#]*\nquery   = ~'#'*\nfrag    = ~[ \\t\\n\\r]*\n",
-  "input": "http://www.ics.uci.edu/pub/ietf/uri/#Related"
-}
