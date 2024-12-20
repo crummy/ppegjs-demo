@@ -50,7 +50,7 @@ export const examples = defineCollection({
         // We shouldn't need fastGlob here, better to use import.meta.glob. But there's a bug:
         // https://github.com/withastro/astro/issues/12689
         const files = await fastGlob("src/examples/*.txt");
-        return await Promise.all(files.map(async f => {
+        const examples = files.map(async f => {
             const contents = await fs.readFile(f, "utf-8")
             const {ptree}: { ptree: PTree } = parser.parse(contents)
             const fields = Object.fromEntries(ptree[1][0][1].map(field => field[1]).map(([key, value]) => [key[1], value[1]]))
@@ -63,7 +63,9 @@ export const examples = defineCollection({
                 grammar,
                 input
             }
-        }));
+        });
+        console.log("Parsing " + examples.length + " examples")
+        return await Promise.all(examples);
     },
     // This schema ensures that the data read in the collection above is valid, by parsing it with Zod
     schema: z.object({
