@@ -38,6 +38,7 @@ const initialExample = examples.find(e => e.highlighted)?.title
         const showJson = jsonCheckbox.checked
         if (parse.ok) output.value = parse.show_ptree(showJson);
         else output.value = parse.show_err();
+        resize(output)
     }
 
     const debounce = function (fn: Function, delay: number = 300) {
@@ -80,11 +81,12 @@ const initialExample = examples.find(e => e.highlighted)?.title
         body {
             display: grid;
             grid-template-areas:
-                "title   title  title"
-                "grammar input  output"
-                "footer  footer footer";
-            grid-template-rows: auto 1fr auto;
-            grid-template-columns: 1fr 1fr 1fr;
+                "title   title"
+                "grammar output"
+                "input   output"
+                "footer  footer";
+            grid-template-rows: auto 1fr 1fr auto;
+            grid-template-columns: 1fr 1fr;
             width: 100%;
             height: 100vh;
             padding: 1em;
@@ -150,6 +152,7 @@ const initialExample = examples.find(e => e.highlighted)?.title
                     "output"
                     "footer";
                 grid-template-columns: 1fr;
+                grid-template-rows: auto;
                 height: auto;
             }
 
