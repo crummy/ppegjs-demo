@@ -41,10 +41,10 @@ const initialExample = examples.find(e => e.highlighted)?.title
         resize(output)
     }
 
-    const debounce = function (fn: Function, delay: number = 300) {
+    const debounce = <T extends (...args: unknown[]) => void>(fn: T, delay: number = 300) => {
         let timeoutId: ReturnType<typeof setTimeout>;
 
-        return function (this: any, ...args: any[]) {
+        return function(this: ThisParameterType<T>, ...args: Parameters<T>) {
             if (timeoutId) {
                 clearTimeout(timeoutId);
             }
