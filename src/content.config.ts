@@ -73,8 +73,11 @@ export const examples = defineCollection({
 	}),
 });
 
-// TODO add types to these functions
-function translate(tree, transform) {
+// TODO finishing adding types to these functions
+function translate(
+	tree: Array<unknown>,
+	transform: Record<string, (tree: Array<unknown>) => unknown>,
+): [string, string | Array<unknown> | unknown] {
 	const [id, val] = tree;
 	const fn = transform[id];
 	if (fn) return fn(tree, transform);
@@ -86,16 +89,20 @@ function translate(tree, transform) {
 	return [id, result];
 }
 
-function obj(tree, transform) {
+function obj(
+	tree: Array<unknown>,
+	transform: Record<string, (tree: Array<unknown>) => unknown>,
+) {
 	// expect child arr
 	const [id, val] = tree;
 	if (typeof val === "string") return { id: val };
-	const result = {};
+	if (!Array.isArray(val)) throw new Error(`Expected array, got ${tree}`);
+	const result: Record<string, string | Array<unknown> | unknown> = {};
 	for (let i = 0; i < val.length; i += 1) {
 		const [k, w] = translate(val[i], transform);
 		if (typeof w === "string") {
 			result[k] = w;
-		} else if (Array.isArray(w) && w.length == 2) {
+		} else if (Array.isArray(w) && w.length === 2) {
 			const [[_key, key], [_val, val]] = w;
 			result[key] = val;
 		} else {
