@@ -1,55 +1,151 @@
 ---
-import Layout from '../layouts/Layout.astro';
+import Layout from "../layouts/Layout.astro";
 
-import {getCollection} from "astro:content"
+import { getCollection } from "astro:content";
 
-const collection = await getCollection("examples")
-const examples = collection.map(c => c.data)
-const initialExample = examples.find(e => e.highlighted)?.title
+const collection = await getCollection("examples");
+const examples = collection.map((c) => c.data);
+const initialExample = examples.find((e) => e.highlighted)?.title;
 ---
 
 <script>
-    import {ppeg} from "ppegjs"
-    const DESKTOP_SIZE = 768
+    import { ppeg } from "ppegjs";
+    const DESKTOP_SIZE = 768;
 
     const getElement = <T extends Element>(selector: string): T => {
         const element = document.querySelector<T>(selector);
         if (!element) throw new Error("No element found: " + selector);
         return element;
-    }
+    };
 
-    const examplesSelect = getElement<HTMLSelectElement>('#examples')
-    const grammar = getElement<HTMLTextAreaElement>('#grammar')
-    const input = getElement<HTMLTextAreaElement>('#input')
-    const output = getElement<HTMLTextAreaElement>('#output')
-    const jsonCheckbox = getElement<HTMLInputElement>('#json')
+    const examplesSelect = getElement<HTMLSelectElement>("#examples");
+    const grammar = getElement<HTMLTextAreaElement>("#grammar");
+    const input = getElement<HTMLDivElement>("#input");
+    const highlights = getElement<HTMLDivElement>("#highlights");
+    const output = getElement<HTMLTextAreaElement>("#output");
+    const jsonCheckbox = getElement<HTMLInputElement>("#json");
 
     const load = () => {
-        const selected = examplesSelect.value
-        const option = getElement<HTMLOptionElement>(`#option-${selected}`)
+        const selected = examplesSelect.value;
+        const option = getElement<HTMLOptionElement>(`#option-${selected}`);
         grammar.value = option.dataset.grammar ?? "";
-        input.value = option.dataset.input ?? "";
-        run()
-    }
+        input.innerText = option.dataset.input ?? "";
+        highlights.innerHTML = ""; // Clear highlights
+        run();
+    };
 
     const run = () => {
-        const parser = ppeg.compile(grammar.value)
-        const parse = parser.parse(input.value)
-        const showJson = jsonCheckbox.checked
+        const parser = ppeg.compile(grammar.value);
+        const parse = parser.parse(input.innerText);
+        const showJson = jsonCheckbox.checked;
         if (parse.ok) {
             output.value = parse.show_ptree(showJson);
-            output.classList.remove("compile-failed")
+
+            // Update highlights when parsing succeeds
+            updateHighlights(input, highlights, parse.matches);
+
+            output.classList.remove("compile-failed");
         } else {
             output.value = parse.show_err();
-            output.classList.add("compile-failed")
-        }
-        resize(output)
-    }
+            output.classList.add("compile-failed");
 
-    const debounce = <T extends (...args: unknown[]) => void>(fn: T, delay: number = 300) => {
+            // Clear highlights when parsing fails
+            highlights.innerHTML = "";
+        }
+        resize(output);
+    };
+
+    // Function to create highlight spans behind the text
+    const updateHighlights = (
+        inputElement: HTMLDivElement,
+        highlightsElement: HTMLDivElement,
+        matches: Array<{
+            name: string;
+            start: number;
+            end: number;
+            text: string;
+        }>,
+    ) => {
+        if (!matches || !matches.length) {
+            highlightsElement.innerHTML = "";
+            return;
+        }
+
+        const text = inputElement.innerText;
+
+        // Clone the text into the highlights div first (for exact positioning)
+        highlightsElement.innerText = text;
+
+        // Create a list of all positions where we need to insert span tags
+        type Mark = {
+            position: number;
+            isStart: boolean;
+            name: string;
+        };
+
+        // Create marks for all start and end positions
+        const marks: Mark[] = [];
+        for (const match of matches) {
+            marks.push({
+                position: match.start,
+                isStart: true,
+                name: match.name,
+            });
+            marks.push({
+                position: match.end,
+                isStart: false,
+                name: match.name,
+            });
+        }
+
+        // Sort by position (ends first when at same position)
+        marks.sort((a, b) => {
+            if (a.position === b.position) {
+                return a.isStart ? 1 : -1; // Close spans before opening new ones at same position
+            }
+            return a.position - b.position;
+        });
+
+        // Build the HTML with properly placed span tags
+        let html = "";
+        let lastPosition = 0;
+
+        for (const mark of marks) {
+            // Add text segment before this mark
+            if (mark.position > lastPosition) {
+                html += text.substring(lastPosition, mark.position);
+            }
+
+            // Add the appropriate tag
+            if (mark.isStart) {
+                html += `<span class="highlight-span" title="${mark.name}">`;
+            } else {
+                html += `</span>`;
+            }
+
+            lastPosition = mark.position;
+        }
+
+        // Add any remaining text
+        if (lastPosition < text.length) {
+            html += text.substring(lastPosition);
+        }
+
+        // Update the highlights element
+        highlightsElement.innerHTML = html;
+
+        // Make sure the highlights div scrolls in sync with the input
+        highlightsElement.scrollTop = inputElement.scrollTop;
+        highlightsElement.scrollLeft = inputElement.scrollLeft;
+    };
+
+    const debounce = <T extends (...args: unknown[]) => void>(
+        fn: T,
+        delay: number = 300,
+    ) => {
         let timeoutId: ReturnType<typeof setTimeout>;
 
-        return function(this: ThisParameterType<T>, ...args: Parameters<T>) {
+        return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
             if (timeoutId) {
                 clearTimeout(timeoutId);
             }
@@ -57,28 +153,37 @@ const initialExample = examples.find(e => e.highlighted)?.title
         };
     };
 
-    const autoparse = debounce(run)
+    const autoparse = debounce(run);
 
     const resize = (el: HTMLElement) => {
         if (document.body.clientWidth <= DESKTOP_SIZE) {
-            el.style.height = "0"
-            el.style.height = el.scrollHeight + "px"
+            el.style.height = "0";
+            el.style.height = el.scrollHeight + "px";
         } else {
-            el.style.height = "auto"
+            el.style.height = "auto";
         }
-    }
+    };
 
-    examplesSelect.addEventListener('change', load);
+    examplesSelect.addEventListener("change", load);
     // A little hack to ensure the textarea heights grow with content
-    [grammar, input, output].forEach(el => el.addEventListener('input', () => resize(el)))
+    [grammar, input, output].forEach((el) =>
+        el.addEventListener("input", () => resize(el)),
+    );
     // The same code needs to run in case we resize from big to small
-    window.addEventListener("resize", () => [grammar, input, output].forEach(resize))
-    grammar.addEventListener('input', autoparse)
-    input.addEventListener('input', autoparse)
-    jsonCheckbox.addEventListener('change', run)
+    window.addEventListener("resize", () =>
+        [grammar, input, output].forEach(resize),
+    );
+    grammar.addEventListener("input", autoparse);
+    input.addEventListener("input", autoparse);
+    input.addEventListener("scroll", () => {
+        // Keep highlights in sync with input scrolling
+        highlights.scrollTop = input.scrollTop;
+        highlights.scrollLeft = input.scrollLeft;
+    });
+    jsonCheckbox.addEventListener("change", run);
 
     load();
-    [grammar, input, output].forEach(resize)
+    [grammar, input, output].forEach(resize);
 </script>
 
 <Layout>
@@ -97,8 +202,64 @@ const initialExample = examples.find(e => e.highlighted)?.title
             box-sizing: border-box;
         }
 
+        /* Input container with overlay setup */
+        .input-container {
+            position: relative;
+            flex: 1;
+            overflow: auto;
+            min-height: 0;
+        }
+
+        #input,
+        .highlights {
+            margin: 2px;
+            padding: 5px;
+            white-space: pre-wrap;
+            font-family: "Courier Line Draw", "Courier Prime", "Courier New",
+                monospace;
+            line-height: 1.5;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: auto;
+        }
+
+        .highlights {
+            pointer-events: none;
+            z-index: 1;
+            color: transparent;
+        }
+
+        #input {
+            z-index: 2;
+            background-color: transparent;
+        }
+
+        /* Highlight span styling - use :global to avoid Astro scoping */
+        :global(.highlight-span) {
+            background-color: rgba(255, 255, 0, 0.3);
+            border-radius: 2px;
+            box-shadow: 0 0 0 1px rgba(255, 200, 0, 0.4);
+        }
+
+        /* Original styles */
         .title {
             grid-area: title;
+        }
+
+        /* Highlight styles for matches */
+        .highlight {
+            background-color: rgba(255, 255, 0, 0.3);
+            border-radius: 2px;
+            box-shadow: 0 0 0 1px rgba(255, 200, 0, 0.4);
+            position: relative;
+            cursor: pointer;
+        }
+
+        .highlight:hover {
+            background-color: rgba(255, 220, 0, 0.5);
         }
 
         .grammar {
@@ -117,7 +278,9 @@ const initialExample = examples.find(e => e.highlighted)?.title
             grid-area: footer;
         }
 
-        .grammar, .input, .output {
+        .grammar,
+        .input,
+        .output {
             display: grid;
             grid-template-rows: auto 1fr;
             border: thin solid gray;
@@ -133,8 +296,10 @@ const initialExample = examples.find(e => e.highlighted)?.title
             justify-content: space-between;
         }
 
-        #grammar, #input, #output {
-            font-family: "Courier Line Draw", "Courier Prime", "Courier New", monospace;
+        #grammar,
+        #output {
+            font-family: "Courier Line Draw", "Courier Prime", "Courier New",
+                monospace;
             white-space: pre-wrap;
             margin: 2px;
             padding: 5px;
@@ -165,44 +330,62 @@ const initialExample = examples.find(e => e.highlighted)?.title
             }
 
             /**inputs should no longer be scrollable**/
-            #grammar, #input, #output {
+            #grammar,
+            #input,
+            #output {
                 overflow-y: visible;
             }
 
             /**instead, they should grow**/
-            .grammar, .input, .output {
+            .grammar,
+            .input,
+            .output {
                 min-height: auto;
             }
         }
     </style>
 
-    <div class='grammar'>
-        <div class='header'>
+    <div class="grammar">
+        <div class="header">
             <label for="grammar">Grammar</label>
-            <span class='examples'>
+            <span class="examples">
                 <label for="examples">Examples: </label>
                 <select name="examples" id="examples">
-                    {examples.map(({title, grammar, input}) =>
-                            <option id={`option-${title}`} value={title} data-grammar={grammar}
-                                    data-input={input} selected={title == initialExample}>{title}</option>)}
+                    {
+                        examples.map(({ title, grammar, input }) => (
+                            <option
+                                id={`option-${title}`}
+                                value={title}
+                                data-grammar={grammar}
+                                data-input={input}
+                                selected={title == initialExample}
+                            >
+                                {title}
+                            </option>
+                        ))
+                    }
                 </select>
-                </span>
+            </span>
         </div>
-        <textarea id='grammar'></textarea>
+        <textarea id="grammar"></textarea>
     </div>
-    <div class='input'>
-        <div class='header'>
+    <div class="input">
+        <div class="header">
             <label for="input">Input</label>
         </div>
-        <textarea id='input'"></textarea>
+        <div class="input-container">
+            <div id="highlights" class="highlights"></div>
+            <div id="input" contenteditable></div>
+        </div>
     </div>
-    <div class='output'>
-        <div class='header'>Parse Tree
+    <div class="output">
+        <div class="header">
+            Parse Tree
             <label class="json">
                 JSON
-                <input type="checkbox" id="json" name="json">
+                <input type="checkbox" id="json" name="json" />
             </label>
         </div>
-        <textarea id='output' disabled></textarea>
+        <textarea id="output" disabled></textarea>
     </div>
 </Layout>
