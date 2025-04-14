@@ -1,7 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 
-import {getCollection} from "astro:content";
+import { getCollection } from "astro:content";
 
 const collection = await getCollection("examples");
 const examples = collection.map((c) => c.data);
@@ -9,509 +9,470 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 ---
 
 <script>
-    import {ppeg} from "ppegjs";
+  import { ppeg } from "ppegjs";
 
-    const DESKTOP_SIZE = 768;
+  const DESKTOP_SIZE = 768;
 
-    const getElement = <T extends Element>(selector: string): T => {
-        const element = document.querySelector<T>(selector);
-        if (!element) throw new Error("No element found: " + selector);
-        return element;
-    };
+  const getElement = <T extends Element>(selector: string): T => {
+    const element = document.querySelector<T>(selector);
+    if (!element) throw new Error("No element found: " + selector);
+    return element;
+  };
 
-    const examplesSelect = getElement<HTMLSelectElement>("#examples");
-    const grammar = getElement<HTMLDivElement>("#grammar");
-    const grammarHighlights = getElement<HTMLDivElement>("#grammar-highlights");
-    const input = getElement<HTMLDivElement>("#input");
-    const inputHighlights = getElement<HTMLDivElement>("#input-highlights");
-    const output = getElement<HTMLDivElement>("#output");
-    const outputHighlights = getElement<HTMLDivElement>("#output-highlights");
-    const jsonCheckbox = getElement<HTMLInputElement>("#json");
+  const examplesSelect = getElement<HTMLSelectElement>("#examples");
+  const grammar = getElement<HTMLDivElement>("#grammar");
+  const input = getElement<HTMLDivElement>("#input");
+  const output = getElement<HTMLDivElement>("#output");
+  const jsonCheckbox = getElement<HTMLInputElement>("#json");
 
-    const load = () => {
-        const selected = examplesSelect.value;
-        const option = getElement<HTMLOptionElement>(`#option-${selected}`);
-        grammar.innerText = option.dataset.grammar ?? "";
-        input.innerText = option.dataset.input ?? "";
-        inputHighlights.innerHTML = ""; // Clear highlights
-        grammarHighlights.innerHTML = ""; // Clear grammar highlights
-        outputHighlights.innerHTML = ""; // Clear output highlights
-        run();
-    };
+  const load = () => {
+    const selected = examplesSelect.value;
+    const option = getElement<HTMLOptionElement>(`#option-${selected}`);
+    grammar.innerText = option.dataset.grammar ?? "";
+    input.innerText = option.dataset.input ?? "";
+    run();
+  };
 
-    const run = () => {
-        const parser = ppeg.compile(grammar.innerText);
-        const parse = parser.parse(input.innerText);
-        const showJson = jsonCheckbox.checked;
+  const run = () => {
+    const parser = ppeg.compile(grammar.innerText);
+    const parse = parser.parse(input.innerText);
+    const showJson = jsonCheckbox.checked;
 
-        if (parse.ok) {
-            output.innerText = parse.show_ptree(showJson);
-            // Figure out how to handle highlights for showJson later
-            if (!showJson) {
-                generateOutputHighlights(output.innerText)
-            }
-            generateGrammarHighlights(grammar.innerText)
-            generateInputHighlights(input.innerText, parse.matches)
+    if (parse.ok) {
+      output.innerText = parse.show_ptree(showJson);
+      // Figure out how to handle highlights for showJson later
+      if (!showJson) {
+        generateOutputHighlights(output.innerText);
+      }
+      generateGrammarHighlights(grammar.innerText);
+      generateInputHighlights(input.innerText, parse.matches);
 
-            output.classList.remove("compile-failed");
-        } else {
-            output.innerText = parse.show_err();
-            output.classList.add("compile-failed");
+      output.classList.remove("compile-failed");
+    } else {
+      output.innerText = parse.show_err();
+      output.classList.add("compile-failed");
+    }
+    resize(output);
+    resize(grammar);
+  };
 
-            // Clear highlights when parsing fails
-            inputHighlights.innerHTML = "";
-        }
-        resize(output);
-        resize(grammar);
-    };
+  type Match = { rule: string; start: number; end: number; id: number };
 
+  function generateInputHighlights(text: string, matches: Match[]) {
+    // Clear existing highlights
+    input.innerHTML = "";
 
-    type Match = { rule: string, start: number, end: number, id: number };
-
-    function generateInputHighlights(input: string, matches: Match[]) {
-        // Clear existing highlights
-        inputHighlights.innerHTML = "";
-
-        // If no input or no matches, just show the plain text
-        if (!input || !matches || matches.length === 0) {
-            inputHighlights.appendChild(document.createTextNode(input));
-            return;
-        }
-
-        // Create an array of all positions where highlighting changes
-        const positions = new Set();
-        positions.add(0);
-        positions.add(input.length);
-
-        for (const match of matches) {
-            positions.add(match.start);
-            positions.add(match.end);
-        }
-
-        const sortedPositions = Array.from(positions).sort((a, b) => a - b);
-
-        // Process each segment between positions
-        for (let i = 0; i < sortedPositions.length - 1; i++) {
-            const start = sortedPositions[i];
-            const end = sortedPositions[i + 1];
-
-            if (start === end) continue;
-
-            // Get the text for this segment
-            const text = input.substring(start, end);
-
-            // Find all matches that cover this segment
-            const coveringMatches = matches.filter(
-                match => match.start <= start && match.end >= end
-            );
-
-            if (coveringMatches.length === 0) {
-                // No matches, just add the text
-                inputHighlights.appendChild(document.createTextNode(text));
-            } else {
-                // Create nested spans for all matches
-                let currentElement = document.createDocumentFragment();
-                const rootElement = currentElement;
-
-                // Add a span for each match
-                for (const match of coveringMatches) {
-                    const span = document.createElement('span');
-                    span.className = 'match';
-                    span.dataset.rule = match.rule;
-                    span.dataset.id = match.id.toString();
-
-                    // Add event listeners
-                    span.addEventListener('mouseover', () => {
-                        document.querySelectorAll(`[data-rule='${match.rule}']`)
-                            .forEach(el => el.classList.add('highlighted'));
-                    });
-
-                    span.addEventListener('mouseleave', () => {
-                        document.querySelectorAll(`[data-rule='${match.rule}']`)
-                            .forEach(el => el.classList.remove('highlighted'));
-                    });
-
-                    currentElement.appendChild(span);
-                    currentElement = span;
-                }
-
-                // Add the text to the innermost span
-                currentElement.appendChild(document.createTextNode(text));
-
-                // Add the entire fragment to the highlights container
-                inputHighlights.appendChild(rootElement);
-            }
-        }
+    // If no input or no matches, just show the plain text
+    if (!text || !matches || matches.length === 0) {
+      input.appendChild(document.createTextNode(text));
+      return;
     }
 
-    function generateGrammarHighlights(grammar: string) {
-        // Clear existing highlights
-        grammarHighlights.innerHTML = "";
+    // Create an array of all positions where highlighting changes
+    const positions = new Set<number>();
+    positions.add(0);
+    positions.add(text.length);
 
-        grammar.split("\n")
-            .map(line => line.match(/^(\s*)(\w+)(\s*=.*)$/) ?? ["", line, "", ""])
-            .forEach(([_, before, name, after], i) => {
-                if (i !== 0) {
-                    grammarHighlights.appendChild(document.createElement("br"));
-                }
-                const container = document.createElement("span")
-                container.className = "grammar-highlight"
-                container.dataset.rule = name
-                if (before) container.appendChild(document.createTextNode(before))
-
-                if (name) {
-                    const span = document.createElement("span");
-                    span.textContent = name;
-                    container.appendChild(span);
-                    container.addEventListener("mouseover", () => {
-                        document.querySelectorAll("#output-highlights [data-rule='" + name + "']")
-                            .forEach(el => el.classList.add("highlighted"));
-                        document.querySelectorAll("#input-highlights [data-rule='" + name + "']")
-                            .forEach(el => el.classList.add("highlighted"));
-                        container.classList.add("highlighted");
-                    })
-                    container.addEventListener("mouseleave", () => {
-                        document.querySelectorAll("#output-highlights [data-rule='" + name + "']")
-                            .forEach(el => el.classList.remove("highlighted"));
-                        document.querySelectorAll("#input-highlights [data-rule='" + name + "']")
-                            .forEach(el => el.classList.remove("highlighted"));
-                        container.classList.remove("highlighted");
-                    })
-                }
-
-                if (after) container.appendChild(document.createTextNode(after));
-
-                grammarHighlights.appendChild(container);
-            })
+    for (const match of matches) {
+      positions.add(match.start);
+      positions.add(match.end);
     }
 
-    function generateOutputHighlights(output: string) {
-        // Clear existing highlights
-        outputHighlights.innerHTML = "";
+    const sortedPositions = Array.from(positions).sort((a, b) => a - b);
 
-        const lines = output.split("\n")
-            .map(line => line.match(/^(\W*)(\w+)(.*)$/) ?? ["", line, "", ""])
-        lines.forEach(([_, before, name, after], i) => {
-            if (i !== 0) {
-                outputHighlights.appendChild(document.createElement("br"))
-            }
-            const container = document.createElement("span")
-            container.className = "output-highlight"
-            container.dataset.rule = name
-            if (before) container.appendChild(document.createTextNode(before))
+    // Process each segment between positions
+    for (let i = 0; i < sortedPositions.length - 1; i++) {
+      const start = sortedPositions[i];
+      const end = sortedPositions[i + 1];
 
-            if (name) {
-                const content = document.createElement("span");
-                content.textContent = name;
-                container.appendChild(content);
-                container.addEventListener("mouseover", () => {
-                    container.classList.add("highlighted");
-                    document.querySelectorAll("#input-highlights [data-rule='" + name + "']")
-                        .forEach(el => el.classList.add("highlighted"));
-                    document.querySelectorAll("#grammar-highlights [data-rule='" + name + "']")
-                        .forEach(el => el.classList.add("highlighted"));
-                })
-                container.addEventListener("mouseleave", () => {
-                    container.classList.remove("highlighted");
-                    document.querySelectorAll("#input-highlights [data-rule='" + name + "']")
-                        .forEach(el => el.classList.remove("highlighted"));
-                    document.querySelectorAll("#grammar-highlights [data-rule='" + name + "']")
-                        .forEach(el => el.classList.remove("highlighted"));
-                })
-            }
+      if (start === end) continue;
 
-            if (after) container.appendChild(document.createTextNode(after));
+      const segment = text.substring(start, end);
 
-            outputHighlights.appendChild(container);
-        })
-    }
+      // Find all matches that cover this segment
+      const coveringMatches = matches.filter(
+        (match) => match.start <= start && match.end >= end,
+      );
 
-    const debounce = <T extends (...args: unknown[]) => void>(
-        fn: T,
-        delay: number = 300,
-    ) => {
-        let timeoutId: ReturnType<typeof setTimeout>;
+      if (coveringMatches.length === 0) {
+        // No matches, just add the text
+        input.appendChild(document.createTextNode(segment));
+      } else {
+        // Create nested spans for all matches
+        let currentElement: DocumentFragment | HTMLSpanElement =
+          document.createDocumentFragment();
+        const rootElement = currentElement;
 
-        return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-            }
-            timeoutId = setTimeout(() => fn.apply(this, args), delay);
-        };
-    };
+        // Add a span for each match
+        for (const match of coveringMatches) {
+          const span = document.createElement("span");
+          span.className = "match";
+          span.dataset.rule = match.rule;
 
-    const autoparse = debounce(run);
+          // Add event listeners
+          span.addEventListener("mouseover", () => {
+            document
+              .querySelectorAll(`[data-rule='${match.rule}']`)
+              .forEach((el) => el.classList.add("highlighted"));
+          });
 
-    const resize = (el: HTMLElement) => {
-        if (document.body.clientWidth <= DESKTOP_SIZE) {
-            el.style.height = "0";
-            el.style.height = el.scrollHeight + "px";
-        } else {
-            el.style.height = "auto";
+          span.addEventListener("mouseleave", () => {
+            document
+              .querySelectorAll(`[data-rule='${match.rule}']`)
+              .forEach((el) => el.classList.remove("highlighted"));
+          });
+
+          currentElement.appendChild(span);
+          currentElement = span;
         }
+
+        // Add the text to the innermost span
+        currentElement.appendChild(document.createTextNode(segment));
+
+        // Add the entire fragment to the highlights container
+        input.appendChild(rootElement);
+      }
+    }
+  }
+
+  function generateGrammarHighlights(text: string) {
+    // Clear existing highlights
+    grammar.innerHTML = "";
+
+    text
+      .split("\n")
+      .map((line) => line.match(/^(\s*)(\w+)(\s*=.*)$/) ?? ["", line, "", ""])
+      .forEach(([_, before, name, after], i) => {
+        if (i !== 0) {
+          grammar.appendChild(document.createElement("br"));
+        }
+        const container = document.createElement("span");
+        container.className = "highlight";
+        if (name) container.dataset.rule = name;
+        if (before) container.appendChild(document.createTextNode(before));
+
+        if (name) {
+          container.appendChild(document.createTextNode(name));
+          container.addEventListener("mouseover", () => {
+            document
+              .querySelectorAll("#output [data-rule='" + name + "']")
+              .forEach((el) => el.classList.add("highlighted"));
+            document
+              .querySelectorAll("#input [data-rule='" + name + "']")
+              .forEach((el) => el.classList.add("highlighted"));
+            container.classList.add("highlighted");
+          });
+          container.addEventListener("mouseleave", () => {
+            document
+              .querySelectorAll("#output [data-rule='" + name + "']")
+              .forEach((el) => el.classList.remove("highlighted"));
+            document
+              .querySelectorAll("#input [data-rule='" + name + "']")
+              .forEach((el) => el.classList.remove("highlighted"));
+            container.classList.remove("highlighted");
+          });
+        }
+
+        if (after) container.appendChild(document.createTextNode(after));
+
+        grammar.appendChild(container);
+      });
+  }
+
+  function generateOutputHighlights(text: string) {
+    // Clear existing highlights
+    output.innerHTML = "";
+
+    const lines = text
+      .split("\n")
+      .map((line) => line.match(/^(\W*)(\w+)(.*)$/) ?? ["", line, "", ""]);
+    lines.forEach(([_, before, name, after], i) => {
+      if (i !== 0) {
+        output.appendChild(document.createElement("br"));
+      }
+      const container = document.createElement("span");
+      container.className = "highlight";
+      if (name) container.dataset.rule = name;
+      if (before) container.appendChild(document.createTextNode(before));
+
+      if (name) {
+        const content = document.createElement("span");
+        content.textContent = name;
+        container.appendChild(content);
+        container.addEventListener("mouseover", () => {
+          container.classList.add("highlighted");
+          document
+            .querySelectorAll("#input [data-rule='" + name + "']")
+            .forEach((el) => el.classList.add("highlighted"));
+          document
+            .querySelectorAll("#grammar [data-rule='" + name + "']")
+            .forEach((el) => el.classList.add("highlighted"));
+        });
+        container.addEventListener("mouseleave", () => {
+          container.classList.remove("highlighted");
+          document
+            .querySelectorAll("#input [data-rule='" + name + "']")
+            .forEach((el) => el.classList.remove("highlighted"));
+          document
+            .querySelectorAll("#grammar [data-rule='" + name + "']")
+            .forEach((el) => el.classList.remove("highlighted"));
+        });
+      }
+
+      if (after) container.appendChild(document.createTextNode(after));
+
+      output.appendChild(container);
+    });
+  }
+
+  const debounce = <T extends (...args: unknown[]) => void>(
+    fn: T,
+    delay: number = 300,
+  ) => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout(() => fn.apply(this, args), delay);
     };
+  };
 
-    // Helper to keep highlights in sync with content scrolling
-    const syncScroll = (content: HTMLElement, highlights: HTMLElement) => {
-        highlights.scrollTop = content.scrollTop;
-        highlights.scrollLeft = content.scrollLeft;
-    };
+  const autoparse = debounce(run);
 
-    examplesSelect.addEventListener("change", load);
+  const resize = (el: HTMLElement) => {
+    if (document.body.clientWidth <= DESKTOP_SIZE) {
+      el.style.height = "0";
+      el.style.height = el.scrollHeight + "px";
+    } else {
+      el.style.height = "auto";
+    }
+  };
 
-    // Add input event listeners
-    grammar.addEventListener("input", autoparse);
-    input.addEventListener("input", autoparse);
+  examplesSelect.addEventListener("change", load);
 
-    // Add input event listeners for resizing
-    [grammar, input, output].forEach((el) =>
-        el.addEventListener("input", () => resize(el)),
-    );
+  // Add input event listeners
+  grammar.addEventListener("input", autoparse);
+  input.addEventListener("input", autoparse);
 
-    // Resize on window resize
-    window.addEventListener("resize", () =>
-        [grammar, input, output].forEach(resize),
-    );
+  // Add input event listeners for resizing
+  [grammar, input, output].forEach((el) =>
+    el.addEventListener("input", () => resize(el)),
+  );
 
-    // Add scroll event listeners to sync highlighting
-    grammar.addEventListener("scroll", () => syncScroll(grammar, grammarHighlights));
-    input.addEventListener("scroll", () => syncScroll(input, inputHighlights));
-    output.addEventListener("scroll", () => syncScroll(output, outputHighlights));
+  // Resize on window resize
+  window.addEventListener("resize", () =>
+    [grammar, input, output].forEach(resize),
+  );
 
-    jsonCheckbox.addEventListener("change", run);
+  jsonCheckbox.addEventListener("change", run);
 
-    // Add click handler setup
-    load();
-    [grammar, input, output].forEach(resize);
+  // Add click handler setup
+  load();
+  [grammar, input, output].forEach(resize);
 </script>
 
 <Layout>
-<style is:global>
-body {
-    display: grid;
-    grid-template-areas:
-    "grammar output"
-    "input   output";
-    grid-template-rows: 1fr 1fr;
-    grid-template-columns: 1fr 1fr;
-    width: 100%;
-    height: 100vh;
-    padding: 1em;
-    gap: 0.5em;
-    box-sizing: border-box;
-    }
-
-/* Content container with overlay setup */
-.content-container {
-    position: relative;
-    flex: 1;
-    overflow: auto;
-    min-height: 0;
-    }
-
-#grammar,
-#input,
-#output,
-.highlights {
-    margin: 2px;
-    padding: 5px;
-    white-space: pre-wrap;
-    font-family: "Courier Line Draw", "Courier Prime", "Courier New",
-    monospace;
-    line-height: 1.5;
-    }
-
-.highlights {
-    z-index: 1;
-    pointer-events: auto;
-    }
-
-#grammar,
-#input,
-#output {
-    position: relative;
-    background-color: transparent;
-    z-index: 1;
-    pointer-events: none;
-    }
-
-/* Positioning for highlights and content */
-.content-container > div {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    overflow: auto;
-    }
-
-#grammar,
-#input,
-#output {
-    z-index: 2; /* Content on top to receive clicks */
-    }
-
-/* Mouse tracking overlay for hover detection */
-.hover-detector {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 3; /* Above content for hover, but transparent for clicks */
-    pointer-events: auto; /* Capture hover events */
-    }
-
-/* Make spans in the overlay appear in the right positions */
-.hover-detector span {
-    position: absolute;
-    display: inline-block;
-    background: transparent;
-    cursor: pointer;
-    }
-
-/* Active highlight for matched elements */
-.highlighted {
-    background-color: rgba(100, 200, 255, 0.3);
-    box-shadow: 0 0 0 1px rgba(0, 100, 200, 0.4);
-    border-radius: 2px;
-    }
-
-/* Original styles */
-.title {
-    grid-area: title;
-    }
-
-.grammar {
-    grid-area: grammar;
-    }
-
-.input {
-    grid-area: input;
-    }
-
-.output {
-    grid-area: output;
-    }
-
-.footer {
-    grid-area: footer;
-    }
-
-.grammar,
-.input,
-.output {
-    display: grid;
-    grid-template-rows: auto 1fr;
-    border: thin solid gray;
-    min-height: 0; /** necessary to prevent divs from growing below screen **/
-    }
-
-.header {
-    height: 20px;
-    padding: 5px;
-    border-bottom: thin solid gray;
-    background: whitesmoke;
-    display: flex;
-    justify-content: space-between;
-    }
-
-#grammar,
-#output {
-    font-family: "Courier Line Draw", "Courier Prime", "Courier New",
-    monospace;
-    white-space: pre-wrap;
-    margin: 2px;
-    padding: 5px;
-    overflow-y: auto;
-    resize: none;
-    }
-
-#output.compile-failed {
-    background-color: tan;
-    }
-
-.json {
-    display: flex;
-    align-items: center;
-    }
-
-@media (max-width: 768px) {
+  <style is:global>
     body {
-    grid-template-areas:
-    "title"
-    "grammar"
-    "input"
-    "output"
-    "footer";
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
-    height: auto;
+      display: grid;
+      grid-template-areas:
+        "grammar output"
+        "input   output";
+      grid-template-rows: 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+      height: 100vh;
+      padding: 1em;
+      gap: 0.5em;
+      box-sizing: border-box;
     }
 
-    /**inputs should no longer be scrollable**/
+    /* Content container with overlay setup */
+    .content-container {
+      position: relative;
+      flex: 1;
+      overflow: auto;
+      min-height: 0;
+    }
+
     #grammar,
     #input,
     #output {
-    overflow-y: visible;
+      margin: 2px;
+      padding: 5px;
+      white-space: pre-wrap;
+      font-family:
+        "Courier Line Draw", "Courier Prime", "Courier New", monospace;
+      line-height: 1.5;
     }
 
-    /**instead, they should grow**/
+    #grammar,
+    #input,
+    #output {
+      position: relative;
+      z-index: 0;
+    }
+
+    /* Mouse tracking overlay for hover detection */
+    .hover-detector {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 3; /* Above content for hover, but transparent for clicks */
+      pointer-events: auto; /* Capture hover events */
+    }
+
+    /* Make spans in the overlay appear in the right positions */
+    .hover-detector span {
+      position: absolute;
+      display: inline-block;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    /* Active highlight for matched elements */
+    .highlighted {
+      background-color: rgba(100, 200, 255, 0.3);
+      box-shadow: 0 0 0 1px rgba(0, 100, 200, 0.4);
+      border-radius: 2px;
+    }
+
+    /* Original styles */
+    .title {
+      grid-area: title;
+    }
+
+    .grammar {
+      grid-area: grammar;
+    }
+
+    .input {
+      grid-area: input;
+    }
+
+    .output {
+      grid-area: output;
+    }
+
+    .footer {
+      grid-area: footer;
+    }
+
     .grammar,
     .input,
     .output {
-    min-height: auto;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      border: thin solid gray;
+      min-height: 0; /** necessary to prevent divs from growing below screen **/
     }
-    }
-</style>
 
-<div class="grammar">
-<div class="header">
-<label for="grammar">Grammar</label>
-<span class="examples">
-<label for="examples">Examples: </label>
-<select name="examples" id="examples">
-{
-    examples.map(({ title, grammar, input }) => (
-        <option
-    id={`option-${title}`}
-    value={title}
-    data-grammar={grammar}
-    data-input={input}
-    selected={title == initialExample}
-    >
-    {title}
-        </option>
-        ))
-        }
-    </select>
-    </span>
+    .header {
+      height: 20px;
+      padding: 5px;
+      border-bottom: thin solid gray;
+      background: whitesmoke;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    #grammar,
+    #output {
+      font-family:
+        "Courier Line Draw", "Courier Prime", "Courier New", monospace;
+      white-space: pre-wrap;
+      margin: 2px;
+      padding: 5px;
+      overflow-y: auto;
+      resize: none;
+    }
+
+    #output.compile-failed {
+      background-color: tan;
+    }
+
+    .json {
+      display: flex;
+      align-items: center;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        grid-template-areas:
+          "title"
+          "grammar"
+          "input"
+          "output"
+          "footer";
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        height: auto;
+      }
+
+      /**inputs should no longer be scrollable**/
+      #grammar,
+      #input,
+      #output {
+        overflow-y: visible;
+      }
+
+      /**instead, they should grow**/
+      .grammar,
+      .input,
+      .output {
+        min-height: auto;
+      }
+    }
+  </style>
+
+  <div class="grammar">
+    <div class="header">
+      <label for="grammar">Grammar</label>
+      <span class="examples">
+        <label for="examples">Examples: </label>
+        <select name="examples" id="examples">
+          {
+            examples.map(({ title, grammar, input }) => (
+              <option
+                id={`option-${title}`}
+                value={title}
+                data-grammar={grammar}
+                data-input={input}
+                selected={title == initialExample}
+              >
+                {title}
+              </option>
+            ))
+          }
+        </select>
+      </span>
     </div>
     <div class="content-container">
-    <div id="grammar-highlights" class="highlights"></div>
-    <div id="grammar" contenteditable></div>
+      <div id="grammar" contenteditable></div>
     </div>
-    </div>
-    <div class="input">
+  </div>
+  <div class="input">
     <div class="header">
-    <label for="input">Input</label>
+      <label for="input">Input</label>
     </div>
     <div class="content-container">
-    <div id="input-highlights" class="highlights"></div>
-    <div id="input" contenteditable></div>
+      <div id="input" contenteditable></div>
     </div>
-    </div>
-    <div class="output">
+  </div>
+  <div class="output">
     <div class="header">
-        Parse Tree
-    <label class="json">
+      Parse Tree
+      <label class="json">
         JSON
-    <input type="checkbox" id="json" name="json" />
-    </label>
+        <input type="checkbox" id="json" name="json" />
+      </label>
     </div>
     <div class="content-container">
-    <div id="output-highlights" class="highlights"></div>
-    <div id="output"></div>
-        </div>
-        </div>
-        </Layout>
+      <div id="output"></div>
+    </div>
+  </div>
+</Layout>
