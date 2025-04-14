@@ -42,7 +42,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       output.innerText = parse.show_ptree(showJson);
       // Figure out how to handle highlights for showJson later
       if (!showJson) {
-        generateOutputHighlights(output.innerText);
+        highlightOutput(output.innerText);
       }
       generateGrammarHighlights(grammar.innerText);
       generateInputHighlights(input.innerText, parse.matches);
@@ -90,9 +90,15 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       const segment = text.substring(start, end);
 
       // Find all matches that cover this segment
-      const coveringMatches = matches.filter(
-        (match) => match.start <= start && match.end >= end,
-      );
+      const coveringMatches = matches
+        .filter((match) => match.start <= start && match.end >= end)
+        .sort((a, b) => {
+          const aLength = a.end - a.start;
+          const bLength = b.end - b.start;
+          // Sort by length (descending)
+          // That way we can highlight the narrowest match, instead of the entire thing (which is always matched)
+          return bLength - aLength;
+        });
 
       if (coveringMatches.length === 0) {
         // No matches, just add the text
@@ -110,16 +116,24 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           span.dataset.rule = match.rule;
 
           // Add event listeners
-          span.addEventListener("mouseover", () => {
+          span.addEventListener("mouseover", (e) => {
+            e.stopPropagation(); // otherwise we highlight lots of matches
             document
-              .querySelectorAll(`[data-rule='${match.rule}']`)
+              .querySelectorAll(
+                `#output [data-matchid='${match.id}'], #grammar [data-rule='${match.rule}']`,
+              )
               .forEach((el) => el.classList.add("highlighted"));
+            span.classList.add("highlighted");
           });
 
-          span.addEventListener("mouseleave", () => {
+          span.addEventListener("mouseleave", (e) => {
+            e.stopPropagation();
             document
-              .querySelectorAll(`[data-rule='${match.rule}']`)
+              .querySelectorAll(
+                `#output [data-matchid='${match.id}'], #grammar [data-rule='${match.rule}']`,
+              )
               .forEach((el) => el.classList.remove("highlighted"));
+            span.classList.remove("highlighted");
           });
 
           currentElement.appendChild(span);
@@ -179,7 +193,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       });
   }
 
-  function generateOutputHighlights(text: string) {
+  function highlightOutput(text: string) {
     // Clear existing highlights
     output.innerHTML = "";
 
@@ -202,7 +216,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         container.addEventListener("mouseover", () => {
           container.classList.add("highlighted");
           document
-            .querySelectorAll("#input [data-rule='" + name + "']")
+            .querySelectorAll("#input [data-matchid='" + name + "']")
             .forEach((el) => el.classList.add("highlighted"));
           document
             .querySelectorAll("#grammar [data-rule='" + name + "']")
