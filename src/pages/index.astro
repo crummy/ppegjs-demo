@@ -10,6 +10,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
 <script>
   import { ppeg } from "ppegjs";
+  import type { Metadata } from "ppegjs";
 
   const DESKTOP_SIZE = 768;
 
@@ -39,13 +40,21 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     const showJson = jsonCheckbox.checked;
 
     if (parse.ok) {
-      output.innerText = parse.show_ptree(showJson);
+      console.log(parse.ptree);
+      console.log(parse.ptree_metadata);
       // Figure out how to handle highlights for showJson later
       if (!showJson) {
-        highlightOutput(output.innerText);
+        const treeRoot = document.createElement("ul");
+        treeRoot.classList.add("parse-tree-root");
+        treeRoot.appendChild(generateOutput(parse.ptree_metadata));
+        output.replaceChildren(treeRoot);
+      } else {
+        output.innerText = parse.show_ptree(showJson);
       }
-      generateGrammarHighlights(grammar.innerText);
-      generateInputHighlights(input.innerText, parse.matches);
+      grammar.replaceChildren(generateGrammarHighlights(grammar.innerText));
+      input.replaceChildren(
+        generateInputHighlights(input.innerText, parse.ptree_metadata),
+      );
 
       output.classList.remove("compile-failed");
     } else {
@@ -56,16 +65,21 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     resize(grammar);
   };
 
-  type Match = { rule: string; start: number; end: number; id: number };
+  function generateInputHighlights(text: string, metadata: Metadata) {
+    const matches: { rule: string; start: number; end: number; id: number }[] =
+      [];
+    function addMatches({ rule, start, end, id, children }: Metadata) {
+      matches.push({ rule, start, end, id });
+      children.forEach(addMatches);
+    }
+    addMatches(metadata);
 
-  function generateInputHighlights(text: string, matches: Match[]) {
-    // Clear existing highlights
-    input.innerHTML = "";
+    const element = document.createDocumentFragment();
 
     // If no input or no matches, just show the plain text
     if (!text || !matches || matches.length === 0) {
-      input.appendChild(document.createTextNode(text));
-      return;
+      element.appendChild(document.createTextNode(text));
+      return element;
     }
 
     // Create an array of all positions where highlighting changes
@@ -102,7 +116,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
       if (coveringMatches.length === 0) {
         // No matches, just add the text
-        input.appendChild(document.createTextNode(segment));
+        element.appendChild(document.createTextNode(segment));
       } else {
         // Create nested spans for all matches
         let currentElement: DocumentFragment | HTMLSpanElement =
@@ -114,6 +128,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           const span = document.createElement("span");
           span.className = "match";
           span.dataset.rule = match.rule;
+          span.dataset.matchid = match.id.toString();
 
           // Add event listeners
           span.addEventListener("mouseover", (e) => {
@@ -144,21 +159,21 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         currentElement.appendChild(document.createTextNode(segment));
 
         // Add the entire fragment to the highlights container
-        input.appendChild(rootElement);
+        element.appendChild(rootElement);
       }
     }
+    return element;
   }
 
   function generateGrammarHighlights(text: string) {
-    // Clear existing highlights
-    grammar.innerHTML = "";
+    const element = document.createDocumentFragment();
 
     text
       .split("\n")
       .map((line) => line.match(/^(\s*)(\w+)(\s*=.*)$/) ?? ["", line, "", ""])
       .forEach(([_, before, name, after], i) => {
         if (i !== 0) {
-          grammar.appendChild(document.createElement("br"));
+          element.appendChild(document.createElement("br"));
         }
         const container = document.createElement("span");
         container.className = "highlight";
@@ -169,19 +184,17 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           container.appendChild(document.createTextNode(name));
           container.addEventListener("mouseover", () => {
             document
-              .querySelectorAll("#output [data-rule='" + name + "']")
-              .forEach((el) => el.classList.add("highlighted"));
-            document
-              .querySelectorAll("#input [data-rule='" + name + "']")
+              .querySelectorAll(
+                `#output [data-rule='${name}'], #input [data-matchid='${name}']`,
+              )
               .forEach((el) => el.classList.add("highlighted"));
             container.classList.add("highlighted");
           });
           container.addEventListener("mouseleave", () => {
             document
-              .querySelectorAll("#output [data-rule='" + name + "']")
-              .forEach((el) => el.classList.remove("highlighted"));
-            document
-              .querySelectorAll("#input [data-rule='" + name + "']")
+              .querySelectorAll(
+                `#output [data-rule='${name}'], #input [data-match='${name}']`,
+              )
               .forEach((el) => el.classList.remove("highlighted"));
             container.classList.remove("highlighted");
           });
@@ -189,54 +202,61 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
         if (after) container.appendChild(document.createTextNode(after));
 
-        grammar.appendChild(container);
+        element.appendChild(container);
       });
+
+    return element;
   }
 
-  function highlightOutput(text: string) {
-    // Clear existing highlights
-    output.innerHTML = "";
+  function generateOutput(tree: Metadata) {
+    // Create the list item to hold this node
+    const item = document.createElement("li");
+    item.classList.add("tree-node");
 
-    const lines = text
-      .split("\n")
-      .map((line) => line.match(/^(\W*)(\w+)(.*)$/) ?? ["", line, "", ""]);
-    lines.forEach(([_, before, name, after], i) => {
-      if (i !== 0) {
-        output.appendChild(document.createElement("br"));
-      }
-      const container = document.createElement("span");
-      container.className = "highlight";
-      if (name) container.dataset.rule = name;
-      if (before) container.appendChild(document.createTextNode(before));
+    // Add the rule name as the node label with proper attributes
+    const label = document.createElement("span");
+    label.classList.add("node-label");
+    label.textContent = tree.rule;
+    if (tree.match) {
+      label.textContent += `: ${tree.match}`;
+    }
+    label.dataset.rule = tree.rule;
+    label.dataset.matchid = tree.id?.toString();
 
-      if (name) {
-        const content = document.createElement("span");
-        content.textContent = name;
-        container.appendChild(content);
-        container.addEventListener("mouseover", () => {
-          container.classList.add("highlighted");
-          document
-            .querySelectorAll("#input [data-matchid='" + name + "']")
-            .forEach((el) => el.classList.add("highlighted"));
-          document
-            .querySelectorAll("#grammar [data-rule='" + name + "']")
-            .forEach((el) => el.classList.add("highlighted"));
-        });
-        container.addEventListener("mouseleave", () => {
-          container.classList.remove("highlighted");
-          document
-            .querySelectorAll("#input [data-rule='" + name + "']")
-            .forEach((el) => el.classList.remove("highlighted"));
-          document
-            .querySelectorAll("#grammar [data-rule='" + name + "']")
-            .forEach((el) => el.classList.remove("highlighted"));
-        });
-      }
-
-      if (after) container.appendChild(document.createTextNode(after));
-
-      output.appendChild(container);
+    // Add event listeners for highlighting
+    label.addEventListener("mouseover", () => {
+      document
+        .querySelectorAll(
+          `#input [data-matchid='${tree.id}'], #grammar [data-rule='${tree.rule}']`,
+        )
+        .forEach((el) => el.classList.add("highlighted"));
+      label.classList.add("highlighted");
     });
+
+    label.addEventListener("mouseleave", () => {
+      document
+        .querySelectorAll(
+          `#input [data-matchid='${tree.id}'], #grammar [data-rule='${tree.rule}']`,
+        )
+        .forEach((el) => el.classList.remove("highlighted"));
+      label.classList.remove("highlighted");
+    });
+
+    item.appendChild(label);
+
+    // Add children if they exist
+    if (tree.children && tree.children.length > 0) {
+      const childList = document.createElement("ul");
+      childList.classList.add("tree-children");
+
+      for (let leaf of tree.children) {
+        childList.appendChild(generateOutput(leaf));
+      }
+
+      item.appendChild(childList);
+    }
+
+    return item;
   }
 
   const debounce = <T extends (...args: unknown[]) => void>(
@@ -440,6 +460,59 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       .output {
         min-height: auto;
       }
+    }
+
+    /* Add these to your style block */
+    .tree-node {
+      list-style-type: none;
+      position: relative;
+    }
+
+    .node-label {
+      cursor: pointer;
+      display: inline-block;
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    .node-label:hover {
+      background-color: rgba(100, 200, 255, 0.2);
+    }
+
+    .tree-children {
+      padding-left: 20px;
+      position: relative;
+    }
+
+    /* Folder-like connector lines */
+    .tree-children::before {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: #ccc;
+    }
+
+    .tree-node::before {
+      content: "";
+      position: absolute;
+      left: -12px;
+      top: 10px;
+      width: 12px;
+      height: 1px;
+      background: #ccc;
+    }
+
+    /* Make it display properly in our output element */
+    #output ul {
+      padding-left: 20px;
+      margin: 0;
+    }
+
+    #output > ul {
+      padding-left: 0;
     }
   </style>
 
