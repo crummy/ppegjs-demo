@@ -1,6 +1,5 @@
 ---
 import Layout from "../layouts/Layout.astro";
-
 import { getCollection } from "astro:content";
 
 const collection = await getCollection("examples");
@@ -11,6 +10,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 <script>
   import { ppeg } from "ppegjs";
   import type { Metadata } from "ppegjs";
+  import { preserveCursorPosition } from "../lib/preserve-cursor";
+  import { debounce } from "../lib/debounce";
 
   const DESKTOP_SIZE = 768;
 
@@ -35,31 +36,57 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   };
 
   const run = () => {
-    const parser = ppeg.compile(grammar.innerText);
-    const parse = parser.parse(input.innerText);
-    const showJson = jsonCheckbox.checked;
+    output.classList.remove("compile-failed");
+    input.classList.remove("compile-failed");
+    grammar.classList.remove("compile-failed");
 
-    if (parse.ok) {
-      console.log(parse.ptree);
-      console.log(parse.ptree_metadata);
-      // Figure out how to handle highlights for showJson later
+    const compiled = ppeg.compile(grammar.innerText);
+    if (!compiled.ok) {
+      grammar.classList.add("compile-failed");
+      output.classList.add("compile-failed");
+      preserveCursorPosition(grammar, () =>
+        grammar.replaceChildren(generateGrammarHighlights(grammar.innerText)),
+      );
+      preserveCursorPosition(input, () =>
+        input.replaceChildren(
+          generateInputHighlights(input.innerText, compiled.ptree_metadata),
+        ),
+      );
+      const treeRoot = document.createElement("ul");
+      treeRoot.classList.add("parse-tree-root");
+      treeRoot.appendChild(generateOutput(compiled.ptree_metadata));
+      output.replaceChildren(treeRoot);
+    } else {
+      const parsed = compiled.parse(input.innerText);
+      const showJson = jsonCheckbox.checked;
+
       if (!showJson) {
         const treeRoot = document.createElement("ul");
         treeRoot.classList.add("parse-tree-root");
-        treeRoot.appendChild(generateOutput(parse.ptree_metadata));
+        treeRoot.appendChild(generateOutput(parsed.ptree_metadata));
         output.replaceChildren(treeRoot);
-      } else {
-        output.innerText = parse.show_ptree(showJson);
       }
-      grammar.replaceChildren(generateGrammarHighlights(grammar.innerText));
-      input.replaceChildren(
-        generateInputHighlights(input.innerText, parse.ptree_metadata),
-      );
 
-      output.classList.remove("compile-failed");
-    } else {
-      output.innerText = parse.show_err();
-      output.classList.add("compile-failed");
+      if (parsed.ok) {
+        // Figure out how to handle highlights for showJson later
+        if (showJson) {
+          output.innerText = JSON.stringify(parsed.ptree, null, 2);
+        }
+        preserveCursorPosition(grammar, () =>
+          grammar.replaceChildren(generateGrammarHighlights(grammar.innerText)),
+        );
+        preserveCursorPosition(input, () =>
+          input.replaceChildren(
+            generateInputHighlights(input.innerText, parsed.ptree_metadata),
+          ),
+        );
+      } else {
+        if (showJson) {
+          output.innerText = parsed.show_err();
+        }
+        input.classList.add("compile-failed");
+        output.classList.add("compile-failed");
+      }
     }
     resize(output);
     resize(grammar);
@@ -216,9 +243,14 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     // Add the rule name as the node label with proper attributes
     const label = document.createElement("span");
     label.classList.add("node-label");
-    label.textContent = tree.rule;
-    if (tree.match) {
-      label.textContent += `: ${tree.match}`;
+    if (!tree.error) {
+      label.textContent = tree.rule;
+      if (tree.match) {
+        label.textContent += `: ${tree.match}`;
+      }
+    } else {
+      item.classList.add("error");
+      label.textContent += `${tree.error.type}: ${tree.error.message}`;
     }
     label.dataset.rule = tree.rule;
     label.dataset.matchid = tree.id?.toString();
@@ -259,20 +291,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     return item;
   }
 
-  const debounce = <T extends (...args: unknown[]) => void>(
-    fn: T,
-    delay: number = 300,
-  ) => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      timeoutId = setTimeout(() => fn.apply(this, args), delay);
-    };
-  };
-
   const autoparse = debounce(run);
 
   const resize = (el: HTMLElement) => {
@@ -302,7 +320,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
   jsonCheckbox.addEventListener("change", run);
 
-  // Add click handler setup
   load();
   [grammar, input, output].forEach(resize);
 </script>
@@ -425,7 +442,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       resize: none;
     }
 
-    #output.compile-failed {
+    .compile-failed {
       background-color: tan;
     }
 
@@ -485,7 +502,16 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
 
     /* Folder-like connector lines */
-    .tree-children::before {
+    .error::before {
+      content: "🛑";
+    }
+
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+
+    .tree-children:not(.error)::before {
       content: "";
       position: absolute;
       left: 8px;
@@ -495,7 +521,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       background: #ccc;
     }
 
-    .tree-node::before {
+    .tree-node:not(.error)::before {
       content: "";
       position: absolute;
       left: -12px;
