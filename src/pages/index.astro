@@ -8,13 +8,24 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 ---
 
 <script>
-  import { ppeg } from "ppegjs";
-  import type { Metadata } from "ppegjs";
-  import { preserveCursorPosition } from "../lib/preserve-cursor";
+  // @ts-ignore - why is this not working? TODO
+  import { ppeg, type Metadata } from "ppegjs";
   import { debounce } from "../lib/debounce";
+
+  import { EditorView, basicSetup } from "codemirror";
+  import { EditorState } from "@codemirror/state";
+  import { grammarHighlightsPlugin } from "../lib/highlight-grammar";
+  import {
+    inputHighlightsPlugin,
+    metadataField,
+    updateMetadata,
+  } from "../lib/highlight-input";
+  import { standardKeymap } from "@codemirror/commands";
+  import { keymap } from "@codemirror/view";
 
   const DESKTOP_SIZE = 768;
 
+  // A little helper to save us from doing null checks later
   const getElement = <T extends Element>(selector: string): T => {
     const element = document.querySelector<T>(selector);
     if (!element) throw new Error("No element found: " + selector);
@@ -30,36 +41,65 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const load = () => {
     const selected = examplesSelect.value;
     const option = getElement<HTMLOptionElement>(`#option-${selected}`);
-    grammar.innerText = option.dataset.grammar ?? "";
-    input.innerText = option.dataset.input ?? "";
+    grammarView.dispatch({
+      changes: {
+        from: 0,
+        insert: option.dataset.grammar ?? "",
+      },
+    });
+    inputView.dispatch({
+      changes: {
+        from: 0,
+        insert: option.dataset.input ?? "",
+      },
+    });
     run();
   };
+
+  const grammarView = new EditorView({
+    state: EditorState.create({
+      doc: "",
+      extensions: [
+        keymap.of(standardKeymap),
+        grammarHighlightsPlugin,
+        EditorView.updateListener.of(debounce(() => run(), 300)),
+      ],
+    }),
+    parent: grammar,
+  });
+
+  // Create input editor
+  const inputView = new EditorView({
+    state: EditorState.create({
+      doc: "",
+      extensions: [
+        keymap.of(standardKeymap),
+        metadataField,
+        inputHighlightsPlugin,
+        EditorView.updateListener.of(debounce(() => run(), 300)),
+      ],
+    }),
+    parent: input,
+  });
 
   const run = () => {
     output.classList.remove("compile-failed");
     input.classList.remove("compile-failed");
     grammar.classList.remove("compile-failed");
 
-    const compiled = ppeg.compile(grammar.innerText);
+    const compiled = ppeg.compile(grammarView.state.doc.toString());
     if (!compiled.ok) {
       grammar.classList.add("compile-failed");
       output.classList.add("compile-failed");
-      preserveCursorPosition(grammar, () =>
-        grammar.replaceChildren(generateGrammarHighlights(grammar.innerText)),
-      );
-      preserveCursorPosition(input, () =>
-        input.replaceChildren(
-          generateInputHighlights(input.innerText, compiled.ptree_metadata),
-        ),
-      );
       const treeRoot = document.createElement("ul");
       treeRoot.classList.add("parse-tree-root");
       treeRoot.appendChild(generateOutput(compiled.ptree_metadata));
       output.replaceChildren(treeRoot);
     } else {
-      const parsed = compiled.parse(input.innerText);
-      const showJson = jsonCheckbox.checked;
+      const parsed = compiled.parse(inputView.state.doc.toString());
+      updateMetadata(inputView, parsed.ptree_metadata);
 
+      const showJson = jsonCheckbox.checked;
       if (!showJson) {
         const treeRoot = document.createElement("ul");
         treeRoot.classList.add("parse-tree-root");
@@ -72,14 +112,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         if (showJson) {
           output.innerText = JSON.stringify(parsed.ptree, null, 2);
         }
-        preserveCursorPosition(grammar, () =>
-          grammar.replaceChildren(generateGrammarHighlights(grammar.innerText)),
-        );
-        preserveCursorPosition(input, () =>
-          input.replaceChildren(
-            generateInputHighlights(input.innerText, parsed.ptree_metadata),
-          ),
-        );
       } else {
         if (showJson) {
           output.innerText = parsed.show_err();
@@ -91,149 +123,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     resize(output);
     resize(grammar);
   };
-
-  function generateInputHighlights(text: string, metadata: Metadata) {
-    const matches: { rule: string; start: number; end: number; id: number }[] =
-      [];
-    function addMatches({ rule, start, end, id, children }: Metadata) {
-      matches.push({ rule, start, end, id });
-      children.forEach(addMatches);
-    }
-    addMatches(metadata);
-
-    const element = document.createDocumentFragment();
-
-    // If no input or no matches, just show the plain text
-    if (!text || !matches || matches.length === 0) {
-      element.appendChild(document.createTextNode(text));
-      return element;
-    }
-
-    // Create an array of all positions where highlighting changes
-    const positions = new Set<number>();
-    positions.add(0);
-    positions.add(text.length);
-
-    for (const match of matches) {
-      positions.add(match.start);
-      positions.add(match.end);
-    }
-
-    const sortedPositions = Array.from(positions).sort((a, b) => a - b);
-
-    // Process each segment between positions
-    for (let i = 0; i < sortedPositions.length - 1; i++) {
-      const start = sortedPositions[i];
-      const end = sortedPositions[i + 1];
-
-      if (start === end) continue;
-
-      const segment = text.substring(start, end);
-
-      // Find all matches that cover this segment
-      const coveringMatches = matches
-        .filter((match) => match.start <= start && match.end >= end)
-        .sort((a, b) => {
-          const aLength = a.end - a.start;
-          const bLength = b.end - b.start;
-          // Sort by length (descending)
-          // That way we can highlight the narrowest match, instead of the entire thing (which is always matched)
-          return bLength - aLength;
-        });
-
-      if (coveringMatches.length === 0) {
-        // No matches, just add the text
-        element.appendChild(document.createTextNode(segment));
-      } else {
-        // Create nested spans for all matches
-        let currentElement: DocumentFragment | HTMLSpanElement =
-          document.createDocumentFragment();
-        const rootElement = currentElement;
-
-        // Add a span for each match
-        for (const match of coveringMatches) {
-          const span = document.createElement("span");
-          span.className = "match";
-          span.dataset.rule = match.rule;
-          span.dataset.matchid = match.id.toString();
-
-          // Add event listeners
-          span.addEventListener("mouseover", (e) => {
-            e.stopPropagation(); // otherwise we highlight lots of matches
-            document
-              .querySelectorAll(
-                `#output [data-matchid='${match.id}'], #grammar [data-rule='${match.rule}']`,
-              )
-              .forEach((el) => el.classList.add("highlighted"));
-            span.classList.add("highlighted");
-          });
-
-          span.addEventListener("mouseleave", (e) => {
-            e.stopPropagation();
-            document
-              .querySelectorAll(
-                `#output [data-matchid='${match.id}'], #grammar [data-rule='${match.rule}']`,
-              )
-              .forEach((el) => el.classList.remove("highlighted"));
-            span.classList.remove("highlighted");
-          });
-
-          currentElement.appendChild(span);
-          currentElement = span;
-        }
-
-        // Add the text to the innermost span
-        currentElement.appendChild(document.createTextNode(segment));
-
-        // Add the entire fragment to the highlights container
-        element.appendChild(rootElement);
-      }
-    }
-    return element;
-  }
-
-  function generateGrammarHighlights(text: string) {
-    const element = document.createDocumentFragment();
-
-    text
-      .split("\n")
-      .map((line) => line.match(/^(\s*)(\w+)(\s*=.*)$/) ?? ["", line, "", ""])
-      .forEach(([_, before, name, after], i) => {
-        if (i !== 0) {
-          element.appendChild(document.createElement("br"));
-        }
-        const container = document.createElement("span");
-        container.className = "highlight";
-        if (name) container.dataset.rule = name;
-        if (before) container.appendChild(document.createTextNode(before));
-
-        if (name) {
-          container.appendChild(document.createTextNode(name));
-          container.addEventListener("mouseover", () => {
-            document
-              .querySelectorAll(
-                `#output [data-rule='${name}'], #input [data-matchid='${name}']`,
-              )
-              .forEach((el) => el.classList.add("highlighted"));
-            container.classList.add("highlighted");
-          });
-          container.addEventListener("mouseleave", () => {
-            document
-              .querySelectorAll(
-                `#output [data-rule='${name}'], #input [data-match='${name}']`,
-              )
-              .forEach((el) => el.classList.remove("highlighted"));
-            container.classList.remove("highlighted");
-          });
-        }
-
-        if (after) container.appendChild(document.createTextNode(after));
-
-        element.appendChild(container);
-      });
-
-    return element;
-  }
 
   function generateOutput(tree: Metadata) {
     // Create the list item to hold this node
@@ -564,17 +453,13 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         </select>
       </span>
     </div>
-    <div class="content-container">
-      <div id="grammar" contenteditable></div>
-    </div>
+    <div class="content-container" id="grammar"></div>
   </div>
   <div class="input">
     <div class="header">
       <label for="input">Input</label>
     </div>
-    <div class="content-container">
-      <div id="input" contenteditable></div>
-    </div>
+    <div class="content-container" id="input"></div>
   </div>
   <div class="output">
     <div class="header">
