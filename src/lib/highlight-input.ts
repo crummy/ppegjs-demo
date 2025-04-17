@@ -95,27 +95,33 @@ export const inputHighlightsPlugin = ViewPlugin.fromClass(
     eventHandlers: {
       mouseover: (e, view) => {
         const target = e.target as HTMLElement | null;
-        const rule = target?.dataset.rule;
-        const matchId = target?.dataset.matchid;
+        const rule = target?.closest<HTMLElement>("[data-rule]")?.dataset.rule;
+        const matchId =
+          target?.closest<HTMLElement>("[data-rule]")?.dataset.matchid;
         if (rule && matchId) {
+          console.log("enter", e.target);
+
           document
             .querySelectorAll(
-              `#grammar [data-rule='${rule}'], #output [data-matchid='${rule}']`,
+              `#input [data-matchid='${matchId}'], #grammar [data-rule='${rule}'], #output [data-matchid='${rule}']`,
             )
             .forEach((el) => el.classList.add("highlighted"));
-          target.classList.add("highlighted");
+          return true;
         }
       },
       mouseout: (e, view) => {
         const target = e.target as HTMLElement | null;
-        const rule = target?.dataset.rule;
-        if (rule) {
+        const rule = target?.closest<HTMLElement>("[data-rule]")?.dataset.rule;
+        const matchId =
+          target?.closest<HTMLElement>("[data-rule]")?.dataset.matchid;
+        if (rule && matchId) {
+          console.log("leave", e.target);
+
           document
             .querySelectorAll(
-              `#grammar [data-rule='${rule}'], #output [data-matchid='${rule}']`,
+              `#input [data-matchid='${matchId}'], #grammar [data-rule='${rule}'], #output [data-matchid='${matchId}']`,
             )
             .forEach((el) => el.classList.remove("highlighted"));
-          target.classList.remove("highlighted");
           return true;
         }
       },

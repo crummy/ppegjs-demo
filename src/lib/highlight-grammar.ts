@@ -22,7 +22,6 @@ const grammarMatcher = new MatchDecorator({
       from + startPos,
       from + endPos,
       Decoration.mark({
-        class: "highlight",
         attributes: {
           "data-rule": match[1],
         },
@@ -54,26 +53,25 @@ export const grammarHighlightsPlugin = ViewPlugin.fromClass(
     eventHandlers: {
       mouseover: (e, view) => {
         const target = e.target as HTMLElement | null;
-        const rule = target?.dataset.rule;
+        const rule = target?.closest<HTMLElement>("[data-rule]")?.dataset.rule;
         if (rule) {
           document
             .querySelectorAll(
-              `#output [data-rule='${rule}'], #input [data-rule='${rule}']`,
+              `#grammar [data-rule='${rule}'], #output [data-rule='${rule}'], #input [data-rule='${rule}']`,
             )
             .forEach((el) => el.classList.add("highlighted"));
-          target.classList.add("highlighted");
+          return true;
         }
       },
       mouseout: (e, view) => {
         const target = e.target as HTMLElement | null;
-        const rule = target?.dataset.rule;
+        const rule = target?.closest<HTMLElement>("[data-rule]")?.dataset.rule;
         if (rule) {
           document
             .querySelectorAll(
-              `#output [data-rule='${rule}'], #input [data-rule='${rule}']`,
+              `#grammar [data-rule='${rule}'], #output [data-rule='${rule}'], #input [data-rule='${rule}']`,
             )
             .forEach((el) => el.classList.remove("highlighted"));
-          target.classList.remove("highlighted");
           return true;
         }
       },
