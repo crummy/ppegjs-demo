@@ -8,8 +8,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 ---
 
 <script>
-  // @ts-ignore - why is this not working? TODO
-  import { ppeg, type Metadata } from "ppegjs";
+  import { ppeg } from "ppegjs";
   import { debounce } from "../lib/debounce";
 
   import { EditorView } from "codemirror";
@@ -17,7 +16,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { grammarHighlightsPlugin } from "../lib/highlight-grammar";
   import {
     inputHighlightsPlugin,
-    metadataChange,
     metadataField,
     updateMetadata,
   } from "../lib/highlight-input";
@@ -60,30 +58,39 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     run();
   };
 
+  const noFocusRingTheme = EditorView.theme({
+    // Target the focused editor and remove the outline/border
+    "&.cm-focused": {
+      outline: "none !important",
+      border: "none !important",
+    },
+  });
+
+  const debouncedRun = debounce(() => run(), 300);
   const grammarView = new EditorView({
     state: EditorState.create({
       doc: "",
       extensions: [
+        noFocusRingTheme,
         keymap.of(standardKeymap),
         grammarHighlightsPlugin,
-        EditorView.updateListener.of(debounce(() => run(), 300)),
+        EditorView.updateListener.of(debouncedRun),
       ],
     }),
     parent: grammar,
   });
-
-  // Create input editor
   const inputView = new EditorView({
     state: EditorState.create({
       doc: "",
       extensions: [
+        noFocusRingTheme,
         keymap.of(standardKeymap),
         metadataField,
         inputHighlightsPlugin,
         EditorView.updateListener.of((update) => {
           // Only run if content changed - otherwise when metadata updates we can get an infinite loop
           if (update.docChanged) {
-            debounce(() => run(), 300)();
+            debouncedRun();
           }
         }),
       ],
@@ -125,66 +132,49 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         output.classList.add("compile-failed");
       }
     }
-    resize(output);
-    resize(grammar);
   };
 
   document.addEventListener("mouseover", function (e) {
-    // If the hovered element has a data-rule attribute
     const target = e.target as HTMLElement;
     if (!target) return;
 
-    if (target.hasAttribute("data-matchid")) {
+    // If it has a matchid, it's either in output or input. In this case we don't want to highlight every matching rule.
+    // Instead, we highlight the matching rule in the grammar, and the matching matchid in whatever the other textinput
+    // is.
+    const rule = target.dataset.rule;
+    const matchId = target.dataset.matchid;
+    if (rule && matchId) {
+      // Find and highlight all elements with the same matchId, except for grammar where we don't have matches
       document
         .querySelectorAll(
-          `#grammar [data-rule="${target.dataset.rule}"], [data-matchid="${target.dataset.matchid}"]`,
+          `#grammar [data-rule="${rule}"], [data-matchid="${matchId}"]`,
         )
-        .forEach((el) => {
-          el.classList.add("highlighted");
-        });
-    } else if (target.hasAttribute("data-rule")) {
-      const rule = target.getAttribute("data-rule");
+        .forEach((el) => el.classList.add("highlighted"));
+    } else if (rule) {
       // Find and highlight all elements with the same data-rule
-      document.querySelectorAll(`[data-rule="${rule}"]`).forEach((el) => {
-        el.classList.add("highlighted");
-      });
+      document
+        .querySelectorAll(`[data-rule="${rule}"]`)
+        .forEach((el) => el.classList.add("highlighted"));
     }
   });
 
   document.addEventListener("mouseout", function (e) {
+    const target = e.target as HTMLElement;
+    if (!target) return;
+
     // Remove highlights when mouse leaves
-    if (e.target?.hasAttribute("data-rule")) {
+    if (target.dataset.rule) {
       document.querySelectorAll(".highlighted").forEach((el) => {
         el.classList.remove("highlighted");
       });
     }
   });
 
-  const resize = (el: HTMLElement) => {
-    if (document.body.clientWidth <= DESKTOP_SIZE) {
-      el.style.height = "0";
-      el.style.height = el.scrollHeight + "px";
-    } else {
-      el.style.height = "auto";
-    }
-  };
-
   examplesSelect.addEventListener("change", load);
-
-  // Add input event listeners for resizing
-  [grammar, input, output].forEach((el) =>
-    el.addEventListener("input", () => resize(el)),
-  );
-
-  // Resize on window resize
-  window.addEventListener("resize", () =>
-    [grammar, input, output].forEach(resize),
-  );
 
   jsonCheckbox.addEventListener("change", run);
 
   load();
-  [grammar, input, output].forEach(resize);
 </script>
 
 <Layout>
@@ -206,7 +196,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     /* Content container with overlay setup */
     .content-container {
       position: relative;
-      flex: 1;
       overflow: auto;
       min-height: 0;
     }
@@ -220,32 +209,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       font-family:
         "Courier Line Draw", "Courier Prime", "Courier New", monospace;
       line-height: 1.5;
-    }
-
-    #grammar,
-    #input,
-    #output {
-      position: relative;
-      z-index: 0;
-    }
-
-    /* Mouse tracking overlay for hover detection */
-    .hover-detector {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 3; /* Above content for hover, but transparent for clicks */
-      pointer-events: auto; /* Capture hover events */
-    }
-
-    /* Make spans in the overlay appear in the right positions */
-    .hover-detector span {
-      position: absolute;
-      display: inline-block;
-      background: transparent;
-      cursor: pointer;
+      resize: none;
     }
 
     /* Active highlight for matched elements */
@@ -253,15 +217,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       background-color: rgba(100, 200, 255, 0.3);
       box-shadow: 0 0 0 1px rgba(0, 100, 200, 0.4);
       border-radius: 2px;
-    }
-
-    /* Original styles */
-    .title {
-      grid-area: title;
-    }
-
-    .grammar {
-      grid-area: grammar;
     }
 
     .input {
@@ -292,17 +247,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       background: whitesmoke;
       display: flex;
       justify-content: space-between;
-    }
-
-    #grammar,
-    #output {
-      font-family:
-        "Courier Line Draw", "Courier Prime", "Courier New", monospace;
-      white-space: pre-wrap;
-      margin: 2px;
-      padding: 5px;
-      overflow-y: auto;
-      resize: none;
     }
 
     .compile-failed {
@@ -339,6 +283,10 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       .input,
       .output {
         min-height: auto;
+      }
+
+      .CodeMirror {
+        height: auto;
       }
     }
 
