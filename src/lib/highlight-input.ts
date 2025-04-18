@@ -69,9 +69,9 @@ export const inputHighlightsPlugin = ViewPlugin.fromClass(
       );
 
       // Process children recursively
-      item.children.forEach((child) =>
-        this.processMetadataItems(child, builder),
-      );
+      item.children
+        .sort((a, b) => a.start - b.start)
+        .forEach((child) => this.processMetadataItems(child, builder));
     }
 
     update(update: ViewUpdate) {
@@ -91,40 +91,5 @@ export const inputHighlightsPlugin = ViewPlugin.fromClass(
   },
   {
     decorations: (v) => v.decorations,
-
-    eventHandlers: {
-      mouseover: (e, view) => {
-        const target = e.target as HTMLElement | null;
-        const rule = target?.closest<HTMLElement>("[data-rule]")?.dataset.rule;
-        const matchId =
-          target?.closest<HTMLElement>("[data-rule]")?.dataset.matchid;
-        if (rule && matchId) {
-          console.log("enter", e.target);
-
-          document
-            .querySelectorAll(
-              `#input [data-matchid='${matchId}'], #grammar [data-rule='${rule}'], #output [data-matchid='${rule}']`,
-            )
-            .forEach((el) => el.classList.add("highlighted"));
-          return true;
-        }
-      },
-      mouseout: (e, view) => {
-        const target = e.target as HTMLElement | null;
-        const rule = target?.closest<HTMLElement>("[data-rule]")?.dataset.rule;
-        const matchId =
-          target?.closest<HTMLElement>("[data-rule]")?.dataset.matchid;
-        if (rule && matchId) {
-          console.log("leave", e.target);
-
-          document
-            .querySelectorAll(
-              `#input [data-matchid='${matchId}'], #grammar [data-rule='${rule}'], #output [data-matchid='${matchId}']`,
-            )
-            .forEach((el) => el.classList.remove("highlighted"));
-          return true;
-        }
-      },
-    },
   },
 );

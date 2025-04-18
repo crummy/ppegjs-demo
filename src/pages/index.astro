@@ -12,16 +12,18 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { ppeg, type Metadata } from "ppegjs";
   import { debounce } from "../lib/debounce";
 
-  import { EditorView, basicSetup } from "codemirror";
+  import { EditorView } from "codemirror";
   import { EditorState } from "@codemirror/state";
   import { grammarHighlightsPlugin } from "../lib/highlight-grammar";
   import {
     inputHighlightsPlugin,
+    metadataChange,
     metadataField,
     updateMetadata,
   } from "../lib/highlight-input";
   import { standardKeymap } from "@codemirror/commands";
   import { keymap } from "@codemirror/view";
+  import { generateOutput } from "../lib/generate-output";
 
   const DESKTOP_SIZE = 768;
 
@@ -44,12 +46,14 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     grammarView.dispatch({
       changes: {
         from: 0,
+        to: grammarView.state.doc.length,
         insert: option.dataset.grammar ?? "",
       },
     });
     inputView.dispatch({
       changes: {
         from: 0,
+        to: inputView.state.doc.length,
         insert: option.dataset.input ?? "",
       },
     });
@@ -76,7 +80,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         keymap.of(standardKeymap),
         metadataField,
         inputHighlightsPlugin,
-        EditorView.updateListener.of(debounce(() => run(), 300)),
+        EditorView.updateListener.of((update) => {
+          // Only run if content changed - otherwise when metadata updates we can get an infinite loop
+          if (update.docChanged) {
+            debounce(() => run(), 300)();
+          }
+        }),
       ],
     }),
     parent: input,
@@ -91,20 +100,16 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (!compiled.ok) {
       grammar.classList.add("compile-failed");
       output.classList.add("compile-failed");
-      const treeRoot = document.createElement("ul");
-      treeRoot.classList.add("parse-tree-root");
-      treeRoot.appendChild(generateOutput(compiled.ptree_metadata));
-      output.replaceChildren(treeRoot);
+      output.replaceChildren(generateOutput(compiled.ptree_metadata));
     } else {
       const parsed = compiled.parse(inputView.state.doc.toString());
+
+      // This will trigger re-render of input with new hoverable elements
       updateMetadata(inputView, parsed.ptree_metadata);
 
       const showJson = jsonCheckbox.checked;
       if (!showJson) {
-        const treeRoot = document.createElement("ul");
-        treeRoot.classList.add("parse-tree-root");
-        treeRoot.appendChild(generateOutput(parsed.ptree_metadata));
-        output.replaceChildren(treeRoot);
+        output.replaceChildren(generateOutput(parsed.ptree_metadata));
       }
 
       if (parsed.ok) {
@@ -124,63 +129,36 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     resize(grammar);
   };
 
-  function generateOutput(tree: Metadata) {
-    // Create the list item to hold this node
-    const item = document.createElement("li");
-    item.classList.add("tree-node");
+  document.addEventListener("mouseover", function (e) {
+    // If the hovered element has a data-rule attribute
+    const target = e.target as HTMLElement;
+    if (!target) return;
 
-    // Add the rule name as the node label with proper attributes
-    const label = document.createElement("span");
-    label.classList.add("node-label");
-    if (!tree.error) {
-      label.textContent = tree.rule;
-      if (tree.match) {
-        label.textContent += `: ${tree.match}`;
-      }
-    } else {
-      item.classList.add("error");
-      label.textContent += `${tree.error.type}: ${tree.error.message}`;
-    }
-    label.dataset.rule = tree.rule;
-    label.dataset.matchid = tree.id?.toString();
-
-    // Add event listeners for highlighting
-    label.addEventListener("mouseover", () => {
+    if (target.hasAttribute("data-matchid")) {
       document
         .querySelectorAll(
-          `#input [data-matchid='${tree.id}'], #grammar [data-rule='${tree.rule}']`,
+          `#grammar [data-rule="${target.dataset.rule}"], [data-matchid="${target.dataset.matchid}"]`,
         )
-        .forEach((el) => el.classList.add("highlighted"));
-      label.classList.add("highlighted");
-    });
-
-    label.addEventListener("mouseleave", () => {
-      document
-        .querySelectorAll(
-          `#input [data-matchid='${tree.id}'], #grammar [data-rule='${tree.rule}']`,
-        )
-        .forEach((el) => el.classList.remove("highlighted"));
-      label.classList.remove("highlighted");
-    });
-
-    item.appendChild(label);
-
-    // Add children if they exist
-    if (tree.children && tree.children.length > 0) {
-      const childList = document.createElement("ul");
-      childList.classList.add("tree-children");
-
-      for (let leaf of tree.children) {
-        childList.appendChild(generateOutput(leaf));
-      }
-
-      item.appendChild(childList);
+        .forEach((el) => {
+          el.classList.add("highlighted");
+        });
+    } else if (target.hasAttribute("data-rule")) {
+      const rule = target.getAttribute("data-rule");
+      // Find and highlight all elements with the same data-rule
+      document.querySelectorAll(`[data-rule="${rule}"]`).forEach((el) => {
+        el.classList.add("highlighted");
+      });
     }
+  });
 
-    return item;
-  }
-
-  const autoparse = debounce(run);
+  document.addEventListener("mouseout", function (e) {
+    // Remove highlights when mouse leaves
+    if (e.target?.hasAttribute("data-rule")) {
+      document.querySelectorAll(".highlighted").forEach((el) => {
+        el.classList.remove("highlighted");
+      });
+    }
+  });
 
   const resize = (el: HTMLElement) => {
     if (document.body.clientWidth <= DESKTOP_SIZE) {
@@ -192,10 +170,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   };
 
   examplesSelect.addEventListener("change", load);
-
-  // Add input event listeners
-  grammar.addEventListener("input", autoparse);
-  input.addEventListener("input", autoparse);
 
   // Add input event listeners for resizing
   [grammar, input, output].forEach((el) =>

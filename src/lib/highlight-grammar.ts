@@ -49,32 +49,5 @@ export const grammarHighlightsPlugin = ViewPlugin.fromClass(
   },
   {
     decorations: (v) => v.decorations,
-
-    eventHandlers: {
-      mouseover: (e, view) => {
-        const target = e.target as HTMLElement | null;
-        const rule = target?.closest<HTMLElement>("[data-rule]")?.dataset.rule;
-        if (rule) {
-          document
-            .querySelectorAll(
-              `#grammar [data-rule='${rule}'], #output [data-rule='${rule}'], #input [data-rule='${rule}']`,
-            )
-            .forEach((el) => el.classList.add("highlighted"));
-          return true;
-        }
-      },
-      mouseout: (e, view) => {
-        const target = e.target as HTMLElement | null;
-        const rule = target?.closest<HTMLElement>("[data-rule]")?.dataset.rule;
-        if (rule) {
-          document
-            .querySelectorAll(
-              `#grammar [data-rule='${rule}'], #output [data-rule='${rule}'], #input [data-rule='${rule}']`,
-            )
-            .forEach((el) => el.classList.remove("highlighted"));
-          return true;
-        }
-      },
-    },
   },
 );
