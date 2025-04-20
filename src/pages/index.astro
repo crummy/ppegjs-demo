@@ -23,8 +23,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { keymap } from "@codemirror/view";
   import { generateOutput } from "../lib/generate-output";
 
-  const DESKTOP_SIZE = 768;
-
   // A little helper to save us from doing null checks later
   const getElement = <T extends Element>(selector: string): T => {
     const element = document.querySelector<T>(selector);
@@ -61,8 +59,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const noFocusRingTheme = EditorView.theme({
     // Target the focused editor and remove the outline/border
     "&.cm-focused": {
-      outline: "none !important",
-      border: "none !important",
+      outline: "none",
+      border: "none",
     },
   });
 
@@ -193,15 +191,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       box-sizing: border-box;
     }
 
-    /* Content container with overlay setup */
-    .content-container {
-      position: relative;
-      overflow: auto;
-      min-height: 0;
-    }
-
-    #grammar,
-    #input,
+    .cm-content,
     #output {
       margin: 2px;
       padding: 5px;
@@ -299,7 +289,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     .node-label {
       cursor: pointer;
       display: inline-block;
-      padding: 2px 5px;
       border-radius: 3px;
     }
 
