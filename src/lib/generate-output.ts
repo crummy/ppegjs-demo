@@ -1,63 +1,50 @@
 import type { Metadata } from "ppegjs";
 
-export function generateOutput(tree: Metadata) {
-  const treeRoot = document.createElement("ul");
-  treeRoot.appendChild(appendOutput(tree));
-  return treeRoot;
-}
+// TODO ideally we would be returning DOM elements, not a string
+export function generateOutput(
+  tree: Metadata,
+  prefix = "",
+  isLastChild = true,
+  indent = 0,
+): string {
+  // Characters for drawing the tree
+  const linePrefix = indent === 0 ? "" : prefix;
 
-function appendOutput(tree: Metadata) {
-  // Create the list item to hold this node
-  const item = document.createElement("li");
-  item.classList.add("tree-node");
+  // Root element doesn't need a prefix
+  const nodeChar = indent === 0 ? "" : isLastChild ? "└─" : "├─";
 
-  // Add the rule name as the node label with proper attributes
-  const label = document.createElement("span");
-  label.classList.add("node-label");
+  // Child indentation - vertical line with space for non-last items, just spaces for last items
+  const childPrefix = isLastChild ? "  " : "│ ";
+
+  // Node content - the rule name and value if available
+  let nodeContent = "";
   if (!tree.error) {
-    label.textContent = tree.rule;
+    nodeContent = tree.rule;
     if (tree.match) {
-      label.textContent += `: ${tree.match}`;
+      nodeContent += ` "${tree.match}"`;
     }
   } else {
-    item.classList.add("error");
-    label.textContent += `${tree.error.type}: ${tree.error.message}`;
+    nodeContent = `🛑 ${tree.error.type}: ${tree.error.message}`;
   }
-  label.dataset.rule = tree.rule;
-  label.dataset.matchid = tree.id?.toString();
 
-  // Add event listeners for highlighting
-  label.addEventListener("mouseover", () => {
-    document
-      .querySelectorAll(
-        `#input [data-matchid='${tree.id}'], #grammar [data-rule='${tree.rule}']`,
-      )
-      .forEach((el) => el.classList.add("highlighted"));
-    label.classList.add("highlighted");
-  });
+  // Add data attributes for highlighting via dataset
+  const dataAttributes = ` data-rule="${tree.rule}"${
+    tree.id ? ` data-matchid="${tree.id}"` : ""
+  }`;
 
-  label.addEventListener("mouseleave", () => {
-    document
-      .querySelectorAll(
-        `#input [data-matchid='${tree.id}'], #grammar [data-rule='${tree.rule}']`,
-      )
-      .forEach((el) => el.classList.remove("highlighted"));
-    label.classList.remove("highlighted");
-  });
-
-  item.appendChild(label);
+  // Create the node with its attributes
+  let result = `${linePrefix}${nodeChar}<span class="node-label"${dataAttributes}>${nodeContent}</span>\n`;
 
   // Add children if they exist
   if (tree.children && tree.children.length > 0) {
-    const childList = document.createElement("ul");
-    childList.classList.add("tree-children");
+    const newPrefix = prefix + childPrefix;
 
-    for (let leaf of tree.children) {
-      childList.appendChild(appendOutput(leaf));
-    }
-
-    item.appendChild(childList);
+    // Process each child
+    tree.children.forEach((child, index) => {
+      const isLast = index === tree.children.length - 1;
+      result += generateOutput(child, newPrefix, isLast, indent + 1);
+    });
   }
 
-  return item;
+  return result;
 }

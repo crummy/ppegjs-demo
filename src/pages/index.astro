@@ -105,7 +105,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (!compiled.ok) {
       grammar.classList.add("compile-failed");
       output.classList.add("compile-failed");
-      output.replaceChildren(generateOutput(compiled.ptree_metadata));
+      output.innerHTML = generateOutput(compiled.ptree_metadata);
     } else {
       const parsed = compiled.parse(inputView.state.doc.toString());
 
@@ -114,7 +114,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
       const showJson = jsonCheckbox.checked;
       if (!showJson) {
-        output.replaceChildren(generateOutput(parsed.ptree_metadata));
+        output.innerHTML = generateOutput(parsed.ptree_metadata);
       }
 
       if (parsed.ok) {
@@ -168,6 +168,65 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
   });
 
+  // Create a MutationObserver to handle the highlighting for the textual tree
+  const observer = new MutationObserver((mutations) => {
+    // Convert span elements with appropriate data attributes in the output pre
+    mutations.forEach((mutation) => {
+      if (
+        mutation.type === "childList" &&
+        (mutation.target as HTMLElement).id === "output"
+      ) {
+        const preElement = (mutation.target as HTMLElement).querySelector(
+          "pre",
+        );
+        if (preElement) {
+          // Convert the span tags in the text content to actual DOM elements
+          const textContent = preElement.textContent || "";
+          const parser = new DOMParser();
+          // Wrap in a div to ensure proper parsing
+          const parsedHTML = parser.parseFromString(
+            `<div>${textContent}</div>`,
+            "text/html",
+          );
+          const firstChild = parsedHTML.body.firstChild as HTMLElement;
+          preElement.innerHTML = firstChild?.innerHTML || "";
+
+          // Now add event listeners to all node-label spans
+          preElement
+            .querySelectorAll(".node-label")
+            .forEach((span: Element) => {
+              span.addEventListener("mouseover", () => {
+                const rule = span.getAttribute("data-rule");
+                const matchId = span.getAttribute("data-matchid");
+
+                if (rule && matchId) {
+                  document
+                    .querySelectorAll(
+                      `#grammar [data-rule="${rule}"], [data-matchid="${matchId}"]`,
+                    )
+                    .forEach((el) => el.classList.add("highlighted"));
+                } else if (rule) {
+                  document
+                    .querySelectorAll(`[data-rule="${rule}"]`)
+                    .forEach((el) => el.classList.add("highlighted"));
+                }
+                span.classList.add("highlighted");
+              });
+
+              span.addEventListener("mouseout", () => {
+                document.querySelectorAll(".highlighted").forEach((el) => {
+                  el.classList.remove("highlighted");
+                });
+              });
+            });
+        }
+      }
+    });
+  });
+
+  // Start observing the output element
+  observer.observe(output, { childList: true, subtree: true });
+
   examplesSelect.addEventListener("change", load);
 
   jsonCheckbox.addEventListener("change", run);
@@ -198,7 +257,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       white-space: pre-wrap;
       font-family:
         "Courier Line Draw", "Courier Prime", "Courier New", monospace;
-      line-height: 1.5;
       resize: none;
     }
 
@@ -207,6 +265,16 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       background-color: rgba(100, 200, 255, 0.3);
       box-shadow: 0 0 0 1px rgba(0, 100, 200, 0.4);
       border-radius: 2px;
+    }
+
+    .node-label {
+      cursor: pointer;
+      border-radius: 3px;
+      padding: 0 2px;
+    }
+
+    .node-label:hover {
+      background-color: rgba(100, 200, 255, 0.2);
     }
 
     .input {
@@ -278,67 +346,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       .CodeMirror {
         height: auto;
       }
-    }
-
-    /* Add these to your style block */
-    .tree-node {
-      list-style-type: none;
-      position: relative;
-    }
-
-    .node-label {
-      cursor: pointer;
-      display: inline-block;
-      border-radius: 3px;
-    }
-
-    .node-label:hover {
-      background-color: rgba(100, 200, 255, 0.2);
-    }
-
-    .tree-children {
-      padding-left: 20px;
-      position: relative;
-    }
-
-    /* Folder-like connector lines */
-    .error::before {
-      content: "🛑";
-    }
-
-    .error {
-      color: red;
-      font-weight: bold;
-    }
-
-    .tree-children:not(.error)::before {
-      content: "";
-      position: absolute;
-      left: 8px;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: #ccc;
-    }
-
-    .tree-node:not(.error)::before {
-      content: "";
-      position: absolute;
-      left: -12px;
-      top: 10px;
-      width: 12px;
-      height: 1px;
-      background: #ccc;
-    }
-
-    /* Make it display properly in our output element */
-    #output ul {
-      padding-left: 20px;
-      margin: 0;
-    }
-
-    #output > ul {
-      padding-left: 0;
     }
   </style>
 
