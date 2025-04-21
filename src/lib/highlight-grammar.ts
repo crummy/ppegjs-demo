@@ -1,7 +1,7 @@
 import {
-  EditorView,
   Decoration,
   type DecorationSet,
+  EditorView,
   ViewPlugin,
   ViewUpdate,
 } from "@codemirror/view";
@@ -43,8 +43,9 @@ export const grammarHighlightsPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.viewportChanged ||
         syntaxTree(update.startState) != syntaxTree(update.state)
-      )
+      ) {
         this.decorations = grammarMatcher.updateDeco(update, this.decorations);
+      }
     }
   },
   {
