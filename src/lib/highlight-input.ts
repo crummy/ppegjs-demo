@@ -77,7 +77,7 @@ export const inputHighlightsPlugin = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       // Check if metadata was updated
       const metadataUpdated = update.transactions.some((tr) =>
-        tr.effects.some((e) => e.is(metadataChange)),
+        tr.effects.some((e) => e.is(metadataChange))
       );
 
       if (metadataUpdated) {

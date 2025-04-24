@@ -22,6 +22,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { standardKeymap } from "@codemirror/commands";
   import { keymap } from "@codemirror/view";
   import { generateOutput } from "../lib/generate-output";
+  import { createDocumentRegistry } from "typescript";
+  import { pastelColors } from "../lib/colours";
 
   // A little helper to save us from doing null checks later
   const getElement = <T extends Element>(selector: string): T => {
@@ -109,9 +111,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     } else {
       const parsed = compiled.parse(inputView.state.doc.toString());
 
-      // This will trigger re-render of input with new hoverable elements
-      updateMetadata(inputView, parsed.ptree_metadata);
-
       const showJson = jsonCheckbox.checked;
       if (!showJson) {
         output.innerHTML = generateOutput(parsed.ptree_metadata);
@@ -129,8 +128,30 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         input.classList.add("compile-failed");
         output.classList.add("compile-failed");
       }
+
+      // This will trigger re-render of input with new hoverable elements
+      updateMetadata(inputView, parsed.ptree_metadata);
+      updateRulesHighlights(parsed.rules);
     }
   };
+
+  let resetRulesHighlights: Array<() => void> = [];
+
+  function updateRulesHighlights(rules: string[]) {
+    resetRulesHighlights.forEach((fn) => fn());
+    resetRulesHighlights = [];
+
+    document.querySelectorAll("[data-rule]").forEach((el) => {
+      const e = el as HTMLElement;
+      const rule = e.dataset.rule;
+      if (rule) {
+        const index = rules.indexOf(rule);
+        const colour = pastelColors[index % pastelColors.length];
+        e.style.backgroundColor = colour;
+      }
+      resetRulesHighlights.push(() => (e.style.backgroundColor = ""));
+    });
+  }
 
   document.addEventListener("mouseover", function (e) {
     const target = e.target as HTMLElement;
@@ -262,9 +283,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
     /* Active highlight for matched elements */
     .highlighted {
-      background-color: rgba(100, 200, 255, 0.3);
-      box-shadow: 0 0 0 1px rgba(0, 100, 200, 0.4);
-      border-radius: 2px;
+      outline: 2px solid black;
+      outline-radius: 2px;
     }
 
     .node-label {
