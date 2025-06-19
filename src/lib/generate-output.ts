@@ -1,4 +1,5 @@
-import type { Metadata } from "ppegjs";
+// Local alias for parse tree metadata
+type Metadata = any;
 
 // TODO ideally we would be returning DOM elements, not a string
 export function generateOutput(
@@ -33,18 +34,46 @@ export function generateOutput(
   }`;
 
   // Create the node with its attributes
-  let result = `${linePrefix}${nodeChar}<span class="node-label"${dataAttributes}>${nodeContent}</span>\n`;
+  let result =
+    `${linePrefix}${nodeChar}<span class="node-label"${dataAttributes}>${nodeContent}</span>\n`;
 
   // Add children if they exist
   if (tree.children && tree.children.length > 0) {
     const newPrefix = prefix + childPrefix;
 
     // Process each child
-    tree.children.forEach((child, index) => {
+    tree.children.forEach((child: any, index: number) => {
       const isLast = index === tree.children.length - 1;
       result += generateOutput(child, newPrefix, isLast, indent + 1);
     });
   }
 
   return result;
+}
+
+/**
+ * Recursively collect all error locations from a Metadata tree.
+ * Returns an array of { error, line, column, node } for each error found.
+ */
+export function collectAllErrors(
+  tree: Metadata,
+): Array<{ error: any; line?: number; column?: number; node: Metadata }> {
+  const errors: Array<
+    { error: any; line?: number; column?: number; node: Metadata }
+  > = [];
+  function recurse(node: any) {
+    if (node.error) {
+      errors.push({
+        error: node.error,
+        line: node.error.line,
+        column: node.error.column,
+        node,
+      });
+    }
+    if (node.children && node.children.length > 0) {
+      node.children.forEach((child: any) => recurse(child));
+    }
+  }
+  recurse(tree);
+  return errors;
 }

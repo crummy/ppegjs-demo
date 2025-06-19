@@ -13,15 +13,25 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
   import { EditorView } from "codemirror";
   import { EditorState } from "@codemirror/state";
-  import { grammarHighlightsPlugin } from "../lib/highlight-grammar";
+  import {
+    grammarHighlightsPlugin,
+    grammarErrorHighlightPlugin,
+    setGrammarError,
+    grammarErrorField,
+    getOffsetFromLineCol as getGrammarOffsetFromLineCol,
+  } from "../lib/highlight-grammar";
   import {
     inputHighlightsPlugin,
     metadataField,
     updateMetadata,
+    inputErrorHighlightPlugin,
+    setInputError,
+    inputErrorField,
+    getOffsetFromLineCol as getInputOffsetFromLineCol,
   } from "../lib/highlight-input";
   import { standardKeymap } from "@codemirror/commands";
   import { keymap } from "@codemirror/view";
-  import { generateOutput } from "../lib/generate-output";
+  import { generateOutput, collectAllErrors } from "../lib/generate-output";
   import { createDocumentRegistry } from "typescript";
   import { pastelColors } from "../lib/colours";
 
@@ -74,7 +84,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         noFocusRingTheme,
         keymap.of(standardKeymap),
         grammarHighlightsPlugin,
+        grammarErrorHighlightPlugin,
         EditorView.updateListener.of(debouncedRun),
+        grammarErrorField,
       ],
     }),
     parent: grammar,
@@ -87,12 +99,14 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         keymap.of(standardKeymap),
         metadataField,
         inputHighlightsPlugin,
+        inputErrorHighlightPlugin,
         EditorView.updateListener.of((update) => {
           // Only run if content changed - otherwise when metadata updates we can get an infinite loop
           if (update.docChanged) {
             debouncedRun();
           }
         }),
+        inputErrorField,
       ],
     }),
     parent: input,
@@ -103,11 +117,27 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     input.classList.remove("compile-failed");
     grammar.classList.remove("compile-failed");
 
+    // Clear previous error highlights
+    grammarView.dispatch({ effects: setGrammarError.of(null) });
+    inputView.dispatch({ effects: setInputError.of(null) });
+
     const compiled = ppeg.compile(grammarView.state.doc.toString());
     if (!compiled.ok) {
       grammar.classList.add("compile-failed");
       output.classList.add("compile-failed");
       output.innerHTML = generateOutput(compiled.ptree_metadata);
+      // Highlight all grammar errors with line/column
+      const errors = collectAllErrors(compiled.ptree_metadata);
+      console.log(errors);
+      for (const err of errors) {
+        if (err.line && err.column) {
+          const doc = grammarView.state.doc.toString();
+          const from = getGrammarOffsetFromLineCol(doc, err.line, err.column);
+          grammarView.dispatch({
+            effects: setGrammarError.of({ from, to: from + 1 }),
+          });
+        }
+      }
     } else {
       const parsed = compiled.parse(inputView.state.doc.toString());
 
@@ -127,6 +157,17 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         }
         input.classList.add("compile-failed");
         output.classList.add("compile-failed");
+        // Highlight all input errors with line/column
+        const errors = collectAllErrors(parsed.ptree_metadata);
+        for (const err of errors) {
+          if (err.line && err.column) {
+            const doc = inputView.state.doc.toString();
+            const from = getInputOffsetFromLineCol(doc, err.line, err.column);
+            inputView.dispatch({
+              effects: setInputError.of({ from, to: from + 1 }),
+            });
+          }
+        }
       }
 
       // This will trigger re-render of input with new hoverable elements
@@ -334,6 +375,15 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     .json {
       display: flex;
       align-items: center;
+    }
+
+    .grammar-error-highlight {
+      background-color: #ffb3ba !important;
+      border-bottom: 2px solid red;
+    }
+    .input-error-highlight {
+      background-color: #ffb3ba !important;
+      border-bottom: 2px solid red;
     }
 
     @media (max-width: 768px) {
