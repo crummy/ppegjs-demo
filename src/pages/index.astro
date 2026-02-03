@@ -11,28 +11,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { ppeg } from "ppegjs";
   import { debounce } from "../lib/debounce";
 
-  import { EditorView } from "codemirror";
-  import { EditorState } from "@codemirror/state";
-  import {
-    grammarHighlightsPlugin,
-    grammarErrorHighlightPlugin,
-    setGrammarError,
-    grammarErrorField,
-    getOffsetFromLineCol as getGrammarOffsetFromLineCol,
-  } from "../lib/highlight-grammar";
-  import {
-    inputHighlightsPlugin,
-    metadataField,
-    updateMetadata,
-    inputErrorHighlightPlugin,
-    setInputError,
-    inputErrorField,
-    getOffsetFromLineCol as getInputOffsetFromLineCol,
-  } from "../lib/highlight-input";
-  import { standardKeymap } from "@codemirror/commands";
-  import { keymap } from "@codemirror/view";
   import { generateOutput, collectAllErrors } from "../lib/generate-output";
-  import { createDocumentRegistry } from "typescript";
   import { pastelColors } from "../lib/colours";
 
   // A little helper to save us from doing null checks later
@@ -51,95 +30,29 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const load = () => {
     const selected = examplesSelect.value;
     const option = getElement<HTMLOptionElement>(`#option-${selected}`);
-    grammarView.dispatch({
-      changes: {
-        from: 0,
-        to: grammarView.state.doc.length,
-        insert: option.dataset.grammar ?? "",
-      },
-    });
-    inputView.dispatch({
-      changes: {
-        from: 0,
-        to: inputView.state.doc.length,
-        insert: option.dataset.input ?? "",
-      },
-    });
+    input.textContent = option.dataset.input ?? "";
+    grammar.textContent = option.dataset.grammar ?? "";
     run();
   };
 
-  const noFocusRingTheme = EditorView.theme({
-    // Target the focused editor and remove the outline/border
-    "&.cm-focused": {
-      outline: "none",
-      border: "none",
-    },
-  });
 
   const debouncedRun = debounce(() => run(), 300);
-  const grammarView = new EditorView({
-    state: EditorState.create({
-      doc: "",
-      extensions: [
-        noFocusRingTheme,
-        keymap.of(standardKeymap),
-        grammarHighlightsPlugin,
-        grammarErrorHighlightPlugin,
-        EditorView.updateListener.of(debouncedRun),
-        grammarErrorField,
-      ],
-    }),
-    parent: grammar,
-  });
-  const inputView = new EditorView({
-    state: EditorState.create({
-      doc: "",
-      extensions: [
-        noFocusRingTheme,
-        keymap.of(standardKeymap),
-        metadataField,
-        inputHighlightsPlugin,
-        inputErrorHighlightPlugin,
-        EditorView.updateListener.of((update) => {
-          // Only run if content changed - otherwise when metadata updates we can get an infinite loop
-          if (update.docChanged) {
-            debouncedRun();
-          }
-        }),
-        inputErrorField,
-      ],
-    }),
-    parent: input,
-  });
 
   const run = () => {
     output.classList.remove("compile-failed");
     input.classList.remove("compile-failed");
     grammar.classList.remove("compile-failed");
 
-    // Clear previous error highlights
-    grammarView.dispatch({ effects: setGrammarError.of(null) });
-    inputView.dispatch({ effects: setInputError.of(null) });
-
-    const compiled = ppeg.compile(grammarView.state.doc.toString());
+    const compiled = ppeg.compile(grammar.textContent);
     if (!compiled.ok) {
       grammar.classList.add("compile-failed");
       output.classList.add("compile-failed");
       output.innerHTML = generateOutput(compiled.ptree_metadata);
       // Highlight all grammar errors with line/column
       const errors = collectAllErrors(compiled.ptree_metadata);
-      console.log(errors);
-      for (const err of errors) {
-        if (err.line && err.column) {
-          const doc = grammarView.state.doc.toString();
-          const from = getGrammarOffsetFromLineCol(doc, err.line, err.column);
-          grammarView.dispatch({
-            effects: setGrammarError.of({ from, to: from + 1 }),
-          });
-        }
-      }
+      console.log(errors) // TODO;
     } else {
-      const parsed = compiled.parse(inputView.state.doc.toString());
+      const parsed = compiled.parse(input.textContent);
 
       const showJson = jsonCheckbox.checked;
       if (!showJson) {
@@ -159,139 +72,17 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         output.classList.add("compile-failed");
         // Highlight all input errors with line/column
         const errors = collectAllErrors(parsed.ptree_metadata);
-        for (const err of errors) {
-          if (err.line && err.column) {
-            const doc = inputView.state.doc.toString();
-            const from = getInputOffsetFromLineCol(doc, err.line, err.column);
-            inputView.dispatch({
-              effects: setInputError.of({ from, to: from + 1 }),
-            });
-          }
-        }
+        console.log(errors) // TODO
       }
-
-      // This will trigger re-render of input with new hoverable elements
-      updateMetadata(inputView, parsed.ptree_metadata);
-      updateRulesHighlights(parsed.rules);
     }
   };
-
-  let resetRulesHighlights: Array<() => void> = [];
-
-  function updateRulesHighlights(rules: string[]) {
-    resetRulesHighlights.forEach((fn) => fn());
-    resetRulesHighlights = [];
-
-    document.querySelectorAll("[data-rule]").forEach((el) => {
-      const e = el as HTMLElement;
-      const rule = e.dataset.rule;
-      if (rule) {
-        const index = rules.indexOf(rule);
-        const colour = pastelColors[index % pastelColors.length];
-        e.style.backgroundColor = colour;
-      }
-      resetRulesHighlights.push(() => (e.style.backgroundColor = ""));
-    });
-  }
-
-  document.addEventListener("mouseover", function (e) {
-    const target = e.target as HTMLElement;
-    if (!target) return;
-
-    // If it has a matchid, it's either in output or input. In this case we don't want to highlight every matching rule.
-    // Instead, we highlight the matching rule in the grammar, and the matching matchid in whatever the other textinput
-    // is.
-    const rule = target.dataset.rule;
-    const matchId = target.dataset.matchid;
-    if (rule && matchId) {
-      // Find and highlight all elements with the same matchId, except for grammar where we don't have matches
-      document
-        .querySelectorAll(
-          `#grammar [data-rule="${rule}"], [data-matchid="${matchId}"]`,
-        )
-        .forEach((el) => el.classList.add("highlighted"));
-    } else if (rule) {
-      // Find and highlight all elements with the same data-rule
-      document
-        .querySelectorAll(`[data-rule="${rule}"]`)
-        .forEach((el) => el.classList.add("highlighted"));
-    }
-  });
-
-  document.addEventListener("mouseout", function (e) {
-    const target = e.target as HTMLElement;
-    if (!target) return;
-
-    // Remove highlights when mouse leaves
-    if (target.dataset.rule) {
-      document.querySelectorAll(".highlighted").forEach((el) => {
-        el.classList.remove("highlighted");
-      });
-    }
-  });
-
-  // Create a MutationObserver to handle the highlighting for the textual tree
-  const observer = new MutationObserver((mutations) => {
-    // Convert span elements with appropriate data attributes in the output pre
-    mutations.forEach((mutation) => {
-      if (
-        mutation.type === "childList" &&
-        (mutation.target as HTMLElement).id === "output"
-      ) {
-        const preElement = (mutation.target as HTMLElement).querySelector(
-          "pre",
-        );
-        if (preElement) {
-          // Convert the span tags in the text content to actual DOM elements
-          const textContent = preElement.textContent || "";
-          const parser = new DOMParser();
-          // Wrap in a div to ensure proper parsing
-          const parsedHTML = parser.parseFromString(
-            `<div>${textContent}</div>`,
-            "text/html",
-          );
-          const firstChild = parsedHTML.body.firstChild as HTMLElement;
-          preElement.innerHTML = firstChild?.innerHTML || "";
-
-          // Now add event listeners to all node-label spans
-          preElement
-            .querySelectorAll(".node-label")
-            .forEach((span: Element) => {
-              span.addEventListener("mouseover", () => {
-                const rule = span.getAttribute("data-rule");
-                const matchId = span.getAttribute("data-matchid");
-
-                if (rule && matchId) {
-                  document
-                    .querySelectorAll(
-                      `#grammar [data-rule="${rule}"], [data-matchid="${matchId}"]`,
-                    )
-                    .forEach((el) => el.classList.add("highlighted"));
-                } else if (rule) {
-                  document
-                    .querySelectorAll(`[data-rule="${rule}"]`)
-                    .forEach((el) => el.classList.add("highlighted"));
-                }
-                span.classList.add("highlighted");
-              });
-
-              span.addEventListener("mouseout", () => {
-                document.querySelectorAll(".highlighted").forEach((el) => {
-                  el.classList.remove("highlighted");
-                });
-              });
-            });
-        }
-      }
-    });
-  });
-
-  // Start observing the output element
-  observer.observe(output, { childList: true, subtree: true });
 
   examplesSelect.addEventListener("change", load);
 
   jsonCheckbox.addEventListener("change", run);
+
+  input.addEventListener("input", debouncedRun)
+  grammar.addEventListener("input", debouncedRun)
 
   load();
 </script>
@@ -312,7 +103,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       box-sizing: border-box;
     }
 
-    .cm-content,
+    #input,
+    #grammar,
     #output {
       margin: 2px;
       padding: 5px;
@@ -412,10 +204,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       .output {
         min-height: auto;
       }
-
-      .CodeMirror {
-        height: auto;
-      }
     }
   </style>
 
@@ -441,13 +229,13 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         </select>
       </span>
     </div>
-    <div class="content-container" id="grammar"></div>
+    <div class="content-container" id="grammar" contenteditable></div>
   </div>
   <div class="input">
     <div class="header">
       <label for="input">Input</label>
     </div>
-    <div class="content-container" id="input"></div>
+    <div class="content-container" id="input" contenteditable></div>
   </div>
   <div class="output">
     <div class="header">
