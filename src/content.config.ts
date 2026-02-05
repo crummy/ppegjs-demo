@@ -44,9 +44,12 @@ export const examples = defineCollection({
   loader: async () => {
     // We shouldn't need fastGlob here, better to use import.meta.glob. But there's a bug:
     // https://github.com/withastro/astro/issues/12689
-    const files = await fastGlob("src/examples/*.txt");
-    const examples = files.map(async (f) => {
-      const contents = await fs.readFile(f, "utf-8");
+    const files = import.meta.glob("src/examples/*.txt", {
+      query: "?raw",
+      import: "default",
+    });
+    const examples = Object.values(files).map(async (f) => {
+      const contents = (await f()) as string;
       const { ptree }: { ptree: PTree } = parser.parse(contents);
       const transform = {
         File: obj,

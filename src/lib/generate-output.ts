@@ -34,8 +34,7 @@ export function generateOutput(
   }`;
 
   // Create the node with its attributes
-  let result =
-    `${linePrefix}${nodeChar}<span class="node-label"${dataAttributes}>${nodeContent}</span>\n`;
+  let result = `${linePrefix}${nodeChar}<span class="node-label"${dataAttributes}>${nodeContent}</span>\n`;
 
   // Add children if they exist
   if (tree.children && tree.children.length > 0) {
@@ -58,9 +57,12 @@ export function generateOutput(
 export function collectAllErrors(
   tree: Metadata,
 ): Array<{ error: any; line?: number; column?: number; node: Metadata }> {
-  const errors: Array<
-    { error: any; line?: number; column?: number; node: Metadata }
-  > = [];
+  const errors: Array<{
+    error: any;
+    line?: number;
+    column?: number;
+    node: Metadata;
+  }> = [];
   function recurse(node: any) {
     if (node.error) {
       errors.push({
