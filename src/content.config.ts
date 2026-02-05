@@ -12,8 +12,6 @@
  */
 
 import { defineCollection, z } from "astro:content";
-import fastGlob from "fast-glob";
-import { promises as fs } from "node:fs";
 import { ppeg } from "ppegjs";
 
 const grammar = `
@@ -38,13 +36,33 @@ type PTree = [
   [["Fields", Field[]], ["grammar", string], ["input", string]],
 ];
 
+type ParseTree = [string, string | ParseTree[]];
+
+type TranslatedValue =
+  | string
+  | TranslatedNode[]
+  | Record<string, unknown>;
+
+type TranslatedNode = [string, TranslatedValue];
+
+type TransformFn = (
+  tree: ParseTree,
+  transform: TransformMap,
+) => TranslatedNode;
+
+type TransformMap = Record<string, TransformFn>;
+
+type FileNode = {
+  grammar: string;
+  input: string;
+  Fields: Record<string, string>;
+};
+
 const parser = ppeg.compile(grammar);
 
 export const examples = defineCollection({
   loader: async () => {
-    // We shouldn't need fastGlob here, better to use import.meta.glob. But there's a bug:
-    // https://github.com/withastro/astro/issues/12689
-    const files = import.meta.glob("src/examples/*.txt", {
+    const files = import.meta.glob("./examples/*.txt", {
       query: "?raw",
       import: "default",
     });
@@ -55,6 +73,7 @@ export const examples = defineCollection({
         File: obj,
         Fields: obj,
       };
+      // @ts-ignore
       const { grammar, input, Fields } = translate(ptree, transform)[1];
       return {
         grammar,
@@ -76,31 +95,24 @@ export const examples = defineCollection({
   }),
 });
 
-// TODO finishing adding types to these functions
-function translate(
-  tree: Array<unknown>,
-  transform: Record<string, (tree: Array<unknown>) => unknown>,
-): [string, string | Array<unknown> | unknown] {
+function translate(tree: ParseTree, transform: TransformMap): TranslatedNode {
   const [id, val] = tree;
   const fn = transform[id];
   if (fn) return fn(tree, transform);
   if (typeof val === "string") return tree;
-  const result = [];
+  const result: TranslatedNode[] = [];
   for (let i = 0; i < val.length; i += 1) {
     result.push(translate(val[i], transform));
   }
   return [id, result];
 }
 
-function obj(
-  tree: Array<unknown>,
-  transform: Record<string, (tree: Array<unknown>) => unknown>,
-) {
+function obj(tree: ParseTree, transform: TransformMap): TranslatedNode {
   // expect child arr
   const [id, val] = tree;
-  if (typeof val === "string") return { id: val };
+  if (typeof val === "string") return [id, { id: val }];
   if (!Array.isArray(val)) throw new Error(`Expected array, got ${tree}`);
-  const result: Record<string, string | Array<unknown> | unknown> = {};
+  const result: Record<string, TranslatedValue> = {};
   for (let i = 0; i < val.length; i += 1) {
     const [k, w] = translate(val[i], transform);
     if (typeof w === "string") {
