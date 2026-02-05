@@ -62,12 +62,12 @@ const parser = ppeg.compile(grammar);
 
 export const examples = defineCollection({
   loader: async () => {
-    const files = import.meta.glob("./examples/*.txt", {
+    const files = import.meta.glob<string>("./examples/*.txt", {
       query: "?raw",
       import: "default",
+      eager: true,
     });
-    const examples = Object.values(files).map(async (f) => {
-      const contents = (await f()) as string;
+    const examples = Object.values(files).map((contents) => {
       const { ptree }: { ptree: PTree } = parser.parse(contents);
       const transform = {
         File: obj,
@@ -84,7 +84,7 @@ export const examples = defineCollection({
       };
     });
     console.log(`Parsing ${examples.length} examples`);
-    return await Promise.all(examples);
+    return examples;
   },
   // This schema ensures that the data read in the collection above is valid, by parsing it with Zod
   schema: z.object({
