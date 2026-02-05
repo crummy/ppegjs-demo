@@ -12,7 +12,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { debounce } from "../lib/debounce";
 
   import { generateOutput, collectAllErrors } from "../lib/generate-output";
-  import { pastelColors } from "../lib/colours";
 
   // A little helper to save us from doing null checks later
   const getElement = <T extends Element>(selector: string): T => {
@@ -42,7 +41,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     input.classList.remove("compile-failed");
     grammar.classList.remove("compile-failed");
 
-    const compiled = ppeg.compile(grammar.textContent);
+    const compiled = ppeg.compile(grammar.innerText);
     if (!compiled.ok) {
       grammar.classList.add("compile-failed");
       output.classList.add("compile-failed");
@@ -51,7 +50,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       const errors = collectAllErrors(compiled.ptree_metadata);
       console.log(errors); // TODO;
     } else {
-      const parsed = compiled.parse(input.textContent);
+      const parsed = compiled.parse(input.innerText);
 
       const showJson = jsonCheckbox.checked;
       if (!showJson) {
