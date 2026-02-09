@@ -51,31 +51,29 @@ export function generateOutput(
 }
 
 /**
- * Recursively collect all error locations from a Metadata tree.
- * Returns an array of { error, line, column, node } for each error found.
+ * Recursively find the first error location in a Metadata tree.
+ * Returns { error, start, end, node } or null if none.
  */
-export function collectAllErrors(
+export function findError(
   tree: Metadata,
-): Array<{ error: any; end: number; start: number; node: Metadata }> {
-  const errors: Array<{
-    error: any;
-    end: number;
-    start: number;
-    node: Metadata;
-  }> = [];
+): { error: any; end: number; start: number; node: Metadata } | null {
+  let found: { error: any; end: number; start: number; node: Metadata } | null =
+    null;
   function recurse(node: any) {
+    if (found) return;
     if (node.error) {
-      errors.push({
+      found = {
         error: node.error,
         end: node.end,
         start: node.start,
         node,
-      });
+      };
+      return;
     }
     if (node.children && node.children.length > 0) {
       node.children.forEach((child: any) => recurse(child));
     }
   }
   recurse(tree);
-  return errors;
+  return found;
 }

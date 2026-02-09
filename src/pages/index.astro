@@ -11,7 +11,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { ppeg } from "ppegjs";
   import { debounce } from "../lib/debounce";
 
-  import { generateOutput, collectAllErrors } from "../lib/generate-output";
+  import { generateOutput, findError } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
 
   // A little helper to save us from doing null checks later
@@ -58,8 +58,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (!compiled.ok) {
       output.innerHTML = generateOutput(compiled.ptree_metadata);
       // Highlight all grammar errors with line/column
-      const errors = collectAllErrors(compiled.ptree_metadata);
-      grammar.innerHTML = highlightErrors(grammar.innerText, errors);
+      const error = findError(compiled.ptree_metadata);
+      grammar.innerHTML = highlightErrors(grammar.innerText, error);
     } else {
       const parsed = compiled.parse(input.innerText);
       console.log(parsed);
@@ -80,72 +80,56 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           output.innerText = parsed.show_err();
         }
         // Highlight all input errors with line/column
-        const errors = collectAllErrors(parsed.ptree_metadata);
-        input.innerHTML = highlightErrors(input.innerText, errors);
+        const error = findError(parsed.ptree_metadata);
+        input.innerHTML = highlightErrors(input.innerText, error);
       }
     }
   };
 
+  // this assumes errors are a range... is that necessary? or are they always
+  // just one character?
   function highlightErrors(
     text: string,
-    errors: Array<{ start: number; end: number }>,
+    error: { start: number; end: number } | null,
   ) {
-    if (!errors.length) return text;
+    if (!error) return text;
 
-    const ranges = errors
-      .map(({ start, end }) => ({
-        start: Math.max(0, start),
-        end: Math.max(0, end),
-      }))
-      .filter(({ start, end }) => end >= start)
-      .sort((a, b) => a.start - b.start || a.end - b.end);
-
-    if (!ranges.length) return text;
-
-    const merged: Array<{ start: number; end: number }> = [];
-    for (const range of ranges) {
-      const last = merged[merged.length - 1];
-      if (!last || range.start > last.end + 1) {
-        merged.push({ ...range });
-      } else if (range.end > last.end) {
-        last.end = range.end;
-      }
-    }
+    const range = {
+      start: Math.max(0, error.start),
+      end: Math.max(0, error.end),
+    };
+    if (range.end < range.start) return text;
 
     let result = "";
-    let rangeIndex = 0;
-    let current = merged[rangeIndex];
+    let open = false;
 
     for (let i = 0; i < text.length; i++) {
-      if (current && i === current.start) {
+      if (!open && i === range.start) {
         result += `<span class="input-error-highlight">`;
+        open = true;
       }
 
       result += text[i];
 
-      if (current && i === current.end) {
+      if (open && i === range.end) {
         result += `</span>`;
-        rangeIndex += 1;
-        current = merged[rangeIndex];
+        open = false;
       }
     }
 
     // special handling for errors past the end of the input - e.g. an extra
     // character. have to put a little special unselectable span.
-    if (current) {
-      if (current.start < text.length) {
+    if (open) {
+      if (range.start < text.length) {
         // Range extends past the end; show a placeholder highlight cell.
         result += `</span><span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
-        rangeIndex += 1;
-        current = merged[rangeIndex];
+        open = false;
       }
+    }
 
-      while (current) {
-        // Range starts at/after end; show a placeholder highlight cell.
-        result += `<span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
-        rangeIndex += 1;
-        current = merged[rangeIndex];
-      }
+    if (range.start >= text.length) {
+      // Range starts at/after end; show a placeholder highlight cell.
+      result += `<span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
     }
 
     return result;
