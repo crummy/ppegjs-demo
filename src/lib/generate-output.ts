@@ -56,19 +56,19 @@ export function generateOutput(
  */
 export function collectAllErrors(
   tree: Metadata,
-): Array<{ error: any; line?: number; column?: number; node: Metadata }> {
+): Array<{ error: any; end: number; start: number; node: Metadata }> {
   const errors: Array<{
     error: any;
-    line?: number;
-    column?: number;
+    end: number;
+    start: number;
     node: Metadata;
   }> = [];
   function recurse(node: any) {
     if (node.error) {
       errors.push({
         error: node.error,
-        line: node.error.line,
-        column: node.error.column,
+        end: node.end,
+        start: node.start,
         node,
       });
     }

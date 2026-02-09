@@ -12,6 +12,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { debounce } from "../lib/debounce";
 
   import { generateOutput, collectAllErrors } from "../lib/generate-output";
+  import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
 
   // A little helper to save us from doing null checks later
   const getElement = <T extends Element>(selector: string): T => {
@@ -31,26 +32,37 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     const option = getElement<HTMLOptionElement>(`#option-${selected}`);
     input.textContent = option.dataset.input ?? "";
     grammar.textContent = option.dataset.grammar ?? "";
-    run();
+    runWithCaret();
   };
 
-  const debouncedRun = debounce(() => run(), 300);
+  const debouncedRun = debounce(() => runWithCaret(), 300);
+
+  // saves the current cursor location, compiles, then restores the location
+  // necessary to ensure cursor location isn't reset after highlighting
+  const runWithCaret = () => {
+    const active = document.activeElement;
+    const target =
+      active === input || active === grammar ? (active as HTMLElement) : null;
+    const selection = target ? getSelectionOffsets(target) : null;
+
+    run();
+
+    if (target && selection) {
+      target.focus();
+      restoreSelectionOffsets(target, selection.start, selection.end);
+    }
+  };
 
   const run = () => {
-    output.classList.remove("compile-failed");
-    input.classList.remove("compile-failed");
-    grammar.classList.remove("compile-failed");
-
     const compiled = ppeg.compile(grammar.innerText);
     if (!compiled.ok) {
-      grammar.classList.add("compile-failed");
-      output.classList.add("compile-failed");
       output.innerHTML = generateOutput(compiled.ptree_metadata);
       // Highlight all grammar errors with line/column
       const errors = collectAllErrors(compiled.ptree_metadata);
-      console.log(errors); // TODO;
+      grammar.innerHTML = highlightErrors(grammar.innerText, errors);
     } else {
       const parsed = compiled.parse(input.innerText);
+      console.log(parsed);
 
       const showJson = jsonCheckbox.checked;
       if (!showJson) {
@@ -62,22 +74,86 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         if (showJson) {
           output.innerText = JSON.stringify(parsed.ptree, null, 2);
         }
+        input.innerHTML = input.innerText; // clear any error highlights
       } else {
         if (showJson) {
           output.innerText = parsed.show_err();
         }
-        input.classList.add("compile-failed");
-        output.classList.add("compile-failed");
         // Highlight all input errors with line/column
         const errors = collectAllErrors(parsed.ptree_metadata);
-        console.log(errors); // TODO
+        input.innerHTML = highlightErrors(input.innerText, errors);
       }
     }
   };
 
+  function highlightErrors(
+    text: string,
+    errors: Array<{ start: number; end: number }>,
+  ) {
+    if (!errors.length) return text;
+
+    const ranges = errors
+      .map(({ start, end }) => ({
+        start: Math.max(0, start),
+        end: Math.max(0, end),
+      }))
+      .filter(({ start, end }) => end >= start)
+      .sort((a, b) => a.start - b.start || a.end - b.end);
+
+    if (!ranges.length) return text;
+
+    const merged: Array<{ start: number; end: number }> = [];
+    for (const range of ranges) {
+      const last = merged[merged.length - 1];
+      if (!last || range.start > last.end + 1) {
+        merged.push({ ...range });
+      } else if (range.end > last.end) {
+        last.end = range.end;
+      }
+    }
+
+    let result = "";
+    let rangeIndex = 0;
+    let current = merged[rangeIndex];
+
+    for (let i = 0; i < text.length; i++) {
+      if (current && i === current.start) {
+        result += `<span class="input-error-highlight">`;
+      }
+
+      result += text[i];
+
+      if (current && i === current.end) {
+        result += `</span>`;
+        rangeIndex += 1;
+        current = merged[rangeIndex];
+      }
+    }
+
+    // special handling for errors past the end of the input - e.g. an extra
+    // character. have to put a little special unselectable span.
+    if (current) {
+      if (current.start < text.length) {
+        // Range extends past the end; show a placeholder highlight cell.
+        result += `</span><span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
+        rangeIndex += 1;
+        current = merged[rangeIndex];
+      }
+
+      while (current) {
+        // Range starts at/after end; show a placeholder highlight cell.
+        result += `<span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
+        rangeIndex += 1;
+        current = merged[rangeIndex];
+      }
+    }
+
+    return result;
+  }
+
   examplesSelect.addEventListener("change", load);
 
-  jsonCheckbox.addEventListener("change", run);
+  jsonCheckbox.addEventListener("change", runWithCaret);
 
   input.addEventListener("input", debouncedRun);
   grammar.addEventListener("input", debouncedRun);
@@ -148,10 +224,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       justify-content: space-between;
     }
 
-    .compile-failed {
-      background-color: tan;
-    }
-
     .json {
       display: flex;
       align-items: center;
@@ -163,6 +235,19 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
     .input-error-highlight {
       background-color: #ffb3ba !important;
+      border-bottom: 2px solid red;
+    }
+    .input-error-placeholder {
+      display: inline-block;
+      position: relative;
+      vertical-align: baseline;
+      user-select: none;
+      pointer-events: none;
+    }
+    .input-error-placeholder::after {
+      content: " ";
+      display: inline-block;
+      background-color: #ffb3ba;
       border-bottom: 2px solid red;
     }
 
