@@ -1,0 +1,56 @@
+<!DOCTYPE html><script type="module" src="/ppegjs-demo/_astro/index.astro_astro_type_script_index_0_lang.TH7xEgjL.js"></script> <html lang="en" data-astro-cid-sckkx6r4> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><link rel="icon" type="image/svg+xml" href="/ppegjs-demo/favicon.svg"><meta name="generator" content="Astro v5.17.1"><title>pPEGjs Demo</title><style>html,body{margin:0;width:100%;height:100%}body{display:grid;grid-template-areas:"grammar output" "input   output";grid-template-rows:1fr 1fr;grid-template-columns:1fr 1fr;width:100%;height:100vh;padding:1em;gap:.5em;box-sizing:border-box}#input,#grammar,#output{margin:2px;padding:5px;white-space:pre-wrap;font-family:Courier Line Draw,Courier Prime,Courier New,monospace;resize:none;overflow-y:scroll}.node-label{border-radius:3px;padding:0 2px}.input{grid-area:input}.output{grid-area:output}.footer{grid-area:footer}.grammar,.input,.output{display:grid;grid-template-rows:auto 1fr;border:thin solid gray;min-height:0}.header{height:20px;padding:5px;border-bottom:thin solid gray;background:#f5f5f5;display:flex;justify-content:space-between}.json{display:flex;align-items:center}.grammar-error-highlight,.input-error-highlight{background-color:#ffb3ba!important;border-bottom:2px solid red}.input-error-placeholder{display:inline-block;position:relative;vertical-align:baseline;user-select:none;pointer-events:none}.input-error-placeholder:after{content:" ";display:inline-block;background-color:#ffb3ba;border-bottom:2px solid red}@media(max-width:768px){body{grid-template-areas:"title" "grammar" "input" "output" "footer";grid-template-columns:1fr;grid-template-rows:auto;height:auto}#grammar,#input,#output{overflow-y:visible}.grammar,.input,.output{min-height:auto}}
+</style></head> <body data-astro-cid-sckkx6r4>   <div class="grammar"> <div class="header"> <label for="grammar">Grammar</label> <span class="examples"> <label for="examples">Examples: </label> <select name="examples" id="examples"> <option id="option-CSV" value="CSV" data-grammar="CSV     = Hdr Row+
+Hdr     = Row
+Row     = field (',' field)* '\r'? '\n'
+field   = _string / _text / ''
+
+_text   = ~[,\n\r]+
+_string = '&#34;' (~[&#34;] / '&#34;&#34;')* '&#34;'
+" data-input="A,B,C
+a1,b1,c1
+a2,&#34;b,2&#34;,c2
+a3,b3,c3
+"> CSV </option><option id="option-Date" value="Date" data-grammar="date  = year '-' month '-' day
+year  = [1-2][0-9]*3
+month = '0'[1-9] / '1'[0-2]
+day   = [0-3][0-9]
+
+# A simple example to play around with.
+# More examples in menu at top.
+
+# This Dingus is only a toy web-page.
+# To try your own pPEG grammars use
+# the peg-play.mjs command line tool,
+# that lets you work on your own files.
+" data-input="2021-02-03" selected> Date </option><option id="option-JSON" value="JSON" data-grammar="json   = _ value _
+value  =  Str / Arr / Obj / num / lit
+Obj    = '{'_ (memb (_','_ memb)*)? _'}'
+memb   = Str _':'_ value
+Arr    = '['_ (value (_','_ value)*)? _']'
+Str    = '&#34;' chars* '&#34;'
+chars  = ~[\u0000-\u001F&#34;\]+ / '\' esc
+esc    = [&#34;\/bfnrt] / 'u' [0-9a-fA-F]*4
+num    = _int _frac? _exp?
+_int   = '-'? ([1-9] [0-9]* / '0')
+_frac  = '.' [0-9]+
+_exp   = [eE] [+-]? [0-9]+
+lit    = 'true' / 'false' / 'null'
+_      = [ \t\n\r]*
+" data-input="{
+    &#34;answer&#34;: 42,
+    &#34;mixed&#34;: [1, 2.3, &#34;a\tstring&#34;, true, [4, 5]],
+    &#34;empty&#34;: {}
+}"> JSON </option><option id="option-URL" value="URL" data-grammar="# Equivalent to the regular expression for
+# well-formed URI's in RFC 3986.
+URI     = (scheme ':')? ('//' auth)?
+          path ('?' query)? ('#' frag)?
+scheme  = ~[:/?#]+
+auth    = ~[/?#]*
+path    = ~[?#]*
+query   = ~'#'*
+frag    = ~[ \t\n\r]*
+" data-input="http://www.ics.uci.edu/pub/ietf/uri/#Related"> URL </option> </select> </span> </div> <div class="content-container" id="grammar" contenteditable></div> </div> <div class="input"> <div class="header"> <label for="input">Input</label> </div> <div class="content-container" id="input" contenteditable></div> </div> <div class="output"> <div class="header">
+Parse Tree
+<label class="json">
+JSON
+<input type="checkbox" id="json" name="json"> </label> </div> <div class="content-container"> <div id="output"></div> </div> </div>  </body></html>
