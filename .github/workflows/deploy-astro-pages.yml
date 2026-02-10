@@ -1,40 +1,35 @@
-name: Deploy to GitHub Pages (Branch Previews)
+name: Deploy to GitHub Pages
 
 on:
+  # Trigger the workflow every time you push to the `main` branch
+  # Using a different branch name? Replace `main` with your branch’s name
   push:
-    branches-ignore: [gh-pages]
+    branches: [main]
+  # Allows you to run this workflow manually from the Actions tab on GitHub.
   workflow_dispatch:
 
+# Allow this job to clone the repo and create a page deployment
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout your repository using git
         uses: actions/checkout@v6
-      - name: Set base path
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "ASTRO_BASE=/ppegjs-demo/" >> "$GITHUB_ENV"
-          else
-            echo "ASTRO_BASE=/ppegjs-demo/preview/${{ github.ref_name }}/" >> "$GITHUB_ENV"
-          fi
       - name: Install, build, and upload your site output
         uses: withastro/action@v5
-      - name: Deploy to gh-pages (main)
-        uses: peaceiris/actions-gh-pages@v4
-        if: ${{ github.ref_name == 'main' }}
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          keep_files: true
-      - name: Deploy to gh-pages (preview)
-        uses: peaceiris/actions-gh-pages@v4
-        if: ${{ github.ref_name != 'main' }}
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          destination_dir: ${{ format('preview/{0}', github.ref_name) }}
-          keep_files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
