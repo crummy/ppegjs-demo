@@ -1,79 +1,166 @@
-// Local alias for parse tree metadata
-type Metadata = any;
+import type { Exp, TraceHistory } from "ppegjs/pPEG.mjs";
 
 // TODO ideally we would be returning DOM elements, not a string
-export function generateOutput(
-  tree: Metadata,
-  prefix = "",
-  isLastChild = true,
+export function generateSuccessfulOutput(
+  tree: Exp | string,
   indent = 0,
 ): string {
-  // Characters for drawing the tree
-  const linePrefix = indent === 0 ? "" : prefix;
+  const prefix = "│ ".repeat(indent);
+  const [label, value] = tree;
 
-  // Root element doesn't need a prefix
-  const nodeChar = indent === 0 ? "" : isLastChild ? "└─" : "├─";
-
-  // Child indentation - vertical line with space for non-last items, just spaces for last items
-  const childPrefix = isLastChild ? "  " : "│ ";
-
-  // Node content - the rule name and value if available
-  let nodeContent = "";
-  if (!tree.error) {
-    nodeContent = tree.rule;
-    if (tree.match) {
-      nodeContent += ` "${tree.match}"`;
-    }
-  } else {
-    nodeContent = `🛑 ${tree.error.type}: ${tree.error.message}`;
+  // Leaf node
+  if (typeof value === "string") {
+    return `${prefix}${label} "${value}"`;
   }
 
-  // Add data attributes for highlighting via dataset
-  const dataAttributes = ` data-rule="${tree.rule}"${
-    tree.id ? ` data-matchid="${tree.id}"` : ""
-  }`;
+  // Internal node
+  let result = `${prefix}${label}`;
 
-  // Create the node with its attributes
-  let result = `${linePrefix}${nodeChar}<span class="node-label"${dataAttributes}>${nodeContent}</span>\n`;
-
-  // Add children if they exist
-  if (tree.children && tree.children.length > 0) {
-    const newPrefix = prefix + childPrefix;
-
-    // Process each child
-    tree.children.forEach((child: any, index: number) => {
-      const isLast = index === tree.children.length - 1;
-      result += generateOutput(child, newPrefix, isLast, indent + 1);
-    });
+  for (const child of value) {
+    result += "\n" + generateSuccessfulOutput(child, indent + 1);
   }
 
   return result;
 }
 
+export function generateErrorOutput(
+  input: string,
+  rules: string[],
+  trace: TraceHistory,
+): { text: string; highlights: { start: number; end: number }[] } {
+  let text = "";
+  const highlights: { start: number; end: number }[] = [];
+
+  for (let offset = 0; offset < trace.length; offset += 4) {
+    const ruleIdx = trace[offset];
+    const depth = trace[offset + 1];
+    const start = trace[offset + 2];
+    const end = trace[offset + 3];
+
+    const prefix = "│ ".repeat(depth);
+    const escapedInput = input
+      .substring(start, end)
+      .replace(/\r?\n/g, "\\n")
+      .replace(/\t/g, "\\t");
+    const ruleName = ruleIdx < 0 ? rules[-ruleIdx - 1] : rules[ruleIdx];
+    const line = `${prefix}${ruleName} "${escapedInput}"`;
+
+    const lineStart = text.length;
+    text += line;
+
+    if (ruleIdx < 0 && line.length > 0) {
+      highlights.push({ start: lineStart, end: lineStart + line.length - 1 });
+    }
+
+    text += "\n";
+  }
+
+  return { text, highlights };
+}
+
 /**
  * Recursively find the first error location in a Metadata tree.
- * Returns { error, start, end, node } or null if none.
+ * Returns { start, end } or null if none.
  */
 export function findError(
-  tree: Metadata,
-): { error: any; end: number; start: number; node: Metadata } | null {
-  let found: { error: any; end: number; start: number; node: Metadata } | null =
-    null;
-  function recurse(node: any) {
-    if (found) return;
-    if (node.error) {
-      found = {
-        error: node.error,
-        end: node.end,
-        start: node.start,
-        node,
-      };
-      return;
+  trace: TraceHistory,
+): { end: number; start: number } | null {
+  let offset = trace.length - 4;
+  let error: { start: number; end: number } | null = null;
+  let maxDepth = 0;
+  while (offset >= 0) {
+    if (trace[offset] < 0) {
+      let depth = trace[offset + 1];
+      let start = trace[offset + 2];
+      let end = trace[offset + 3] + 1;
+      if (depth >= maxDepth) {
+        error = { start, end };
+        maxDepth = depth;
+      }
     }
-    if (node.children && node.children.length > 0) {
-      node.children.forEach((child: any) => recurse(child));
-    }
+    offset -= 4;
   }
-  recurse(tree);
-  return found;
+  return error;
+}
+
+export function highlightErrors(
+  element: HTMLElement,
+  error: { start: number; end: number } | null,
+) {
+  const text = element.innerText;
+  const highlightName = `${element.id || "input"}-error`;
+
+  const highlightRegistry = (CSS as unknown as { highlights?: any }).highlights;
+  const HighlightCtor = (globalThis as unknown as { Highlight?: any })
+    .Highlight;
+
+  element.textContent = text;
+  if (!highlightRegistry || !HighlightCtor) {
+    return;
+  }
+  highlightRegistry.delete(highlightName);
+
+  if (!error) {
+    return;
+  }
+
+  const range = {
+    start: Math.max(0, error.start),
+    end: Math.max(0, error.end),
+  };
+  if (range.end < range.start) {
+    return;
+  }
+
+  const textNode = element.firstChild;
+  if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+    return;
+  }
+
+  const start = Math.min(range.start, text.length);
+  const endExclusive = Math.min(range.end + 1, text.length);
+
+  if (start < text.length && endExclusive > start) {
+    const domRange = document.createRange();
+    domRange.setStart(textNode, start);
+    domRange.setEnd(textNode, endExclusive);
+    highlightRegistry.set(highlightName, new HighlightCtor(domRange));
+  }
+}
+
+export function highlightRanges(
+  element: HTMLElement,
+  ranges: { start: number; end: number }[],
+  highlightName: string,
+) {
+  const text = element.innerText;
+  const highlightRegistry = (CSS as unknown as { highlights?: any }).highlights;
+  const HighlightCtor = (globalThis as unknown as { Highlight?: any })
+    .Highlight;
+
+  element.textContent = text;
+  if (!highlightRegistry || !HighlightCtor) {
+    return;
+  }
+  highlightRegistry.delete(highlightName);
+
+  if (!ranges.length) return;
+
+  const textNode = element.firstChild;
+  if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+
+  const domRanges: Range[] = [];
+  for (const range of ranges) {
+    const start = Math.min(Math.max(0, range.start), text.length);
+    const endExclusive = Math.min(Math.max(0, range.end + 1), text.length);
+    if (endExclusive <= start) continue;
+    const domRange = document.createRange();
+    domRange.setStart(textNode, start);
+    domRange.setEnd(textNode, endExclusive);
+    domRanges.push(domRange);
+  }
+
+  if (domRanges.length) {
+    highlightRegistry.set(highlightName, new HighlightCtor(...domRanges));
+  }
 }

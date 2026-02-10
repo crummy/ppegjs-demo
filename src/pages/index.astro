@@ -11,7 +11,13 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { ppeg } from "ppegjs";
   import { debounce } from "../lib/debounce";
 
-  import { generateOutput, findError } from "../lib/generate-output";
+  import {
+    generateSuccessfulOutput,
+    findError,
+    highlightRanges,
+    generateErrorOutput,
+    highlightErrors,
+  } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
 
   // A little helper to save us from doing null checks later
@@ -35,8 +41,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     runWithCaret();
   };
 
-  const debouncedRun = debounce(() => runWithCaret(), 300);
-
   // saves the current cursor location, compiles, then restores the location
   // necessary to ensure cursor location isn't reset after highlighting
   const runWithCaret = () => {
@@ -56,91 +60,54 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const run = () => {
     const compiled = ppeg.compile(grammar.innerText);
     if (!compiled.ok) {
-      output.innerHTML = generateOutput(compiled.ptree_metadata);
+      const errorOutput = generateErrorOutput(
+        input.innerText,
+        compiled.rules,
+        compiled.trace_history
+      );
+      output.textContent = errorOutput.text;
+      highlightRanges(output, errorOutput.highlights, "output-error");
       // Highlight all grammar errors with line/column
-      const error = findError(compiled.ptree_metadata);
-      grammar.innerHTML = highlightErrors(grammar.innerText, error);
+      const error = findError(compiled.trace_history);
+      highlightErrors(grammar, error);
     } else {
       const parsed = compiled.parse(input.innerText);
       console.log(parsed);
 
       const showJson = jsonCheckbox.checked;
-      if (!showJson) {
-        output.innerHTML = generateOutput(parsed.ptree_metadata);
-      }
-
       if (parsed.ok) {
-        // Figure out how to handle highlights for showJson later
         if (showJson) {
           output.innerText = JSON.stringify(parsed.ptree, null, 2);
+        } else {
+          output.innerHTML = generateSuccessfulOutput(parsed.ptree);
         }
-        input.innerHTML = input.innerText; // clear any error highlights
+        // reset highlights
+        highlightErrors(input, null)
       } else {
         if (showJson) {
           output.innerText = parsed.show_err();
+        } else {
+          const errorOutput = generateErrorOutput(
+            input.innerText,
+            parsed.rules,
+            parsed.trace_history
+          );
+          output.textContent = errorOutput.text;
+          highlightRanges(output, errorOutput.highlights, "output-error");
         }
         // Highlight all input errors with line/column
-        const error = findError(parsed.ptree_metadata);
-        input.innerHTML = highlightErrors(input.innerText, error);
+        const error = findError(parsed.trace_history);
+        highlightErrors(input, error);
       }
     }
   };
-
-  // this assumes errors are a range... is that necessary? or are they always
-  // just one character?
-  function highlightErrors(
-    text: string,
-    error: { start: number; end: number } | null,
-  ) {
-    if (!error) return text;
-
-    const range = {
-      start: Math.max(0, error.start),
-      end: Math.max(0, error.end),
-    };
-    if (range.end < range.start) return text;
-
-    let result = "";
-    let open = false;
-
-    for (let i = 0; i < text.length; i++) {
-      if (!open && i === range.start) {
-        result += `<span class="input-error-highlight">`;
-        open = true;
-      }
-
-      result += text[i];
-
-      if (open && i === range.end) {
-        result += `</span>`;
-        open = false;
-      }
-    }
-
-    // special handling for errors past the end of the input - e.g. an extra
-    // character. have to put a little special unselectable span.
-    if (open) {
-      if (range.start < text.length) {
-        // Range extends past the end; show a placeholder highlight cell.
-        result += `</span><span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
-        open = false;
-      }
-    }
-
-    if (range.start >= text.length) {
-      // Range starts at/after end; show a placeholder highlight cell.
-      result += `<span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
-    }
-
-    return result;
-  }
 
   examplesSelect.addEventListener("change", load);
 
   jsonCheckbox.addEventListener("change", runWithCaret);
 
-  input.addEventListener("input", debouncedRun);
-  grammar.addEventListener("input", debouncedRun);
+  input.addEventListener("input", runWithCaret);
+  grammar.addEventListener("input", runWithCaret);
 
   load();
 </script>
@@ -170,6 +137,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       font-family:
         "Courier Line Draw", "Courier Prime", "Courier New", monospace;
       resize: none;
+    }
+
+    .content-container {
       overflow-y: scroll;
     }
 
@@ -213,25 +183,10 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       align-items: center;
     }
 
-    .grammar-error-highlight {
+    ::highlight(grammar-error),
+    ::highlight(input-error),
+    ::highlight(output-error) {
       background-color: #ffb3ba !important;
-      border-bottom: 2px solid red;
-    }
-    .input-error-highlight {
-      background-color: #ffb3ba !important;
-      border-bottom: 2px solid red;
-    }
-    .input-error-placeholder {
-      display: inline-block;
-      position: relative;
-      vertical-align: baseline;
-      user-select: none;
-      pointer-events: none;
-    }
-    .input-error-placeholder::after {
-      content: " ";
-      display: inline-block;
-      background-color: #ffb3ba;
       border-bottom: 2px solid red;
     }
 
