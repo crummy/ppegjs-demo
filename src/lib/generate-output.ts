@@ -59,27 +59,56 @@ export function generateErrorOutput(
 }
 
 /**
- * Find the furthest error in a TraceHistory
+ * Find the error in a TraceHistory most likely to be at fault for bad input
  * Returns { start, end } or null if none.
  */
 export function findError(
   trace: TraceHistory,
 ): { end: number; start: number } | null {
-  let maxStart = -1;
-  let error: { end: number; start: number } | null = null;
-  for (let e of splitTraces(trace)) {
-    if (!e.ok && e.start >= maxStart) {
-      maxStart = e.start;
-      error = e;
+  let best: {
+    start: number;
+    end: number;
+    depth: number;
+  } | null = null;
+
+  for (const e of splitTraces(trace)) {
+    if (e.ok) continue;
+    if (!best) {
+      best = e;
+      continue;
+    }
+    // prefer further end
+    if (e.end > best.end) {
+      best = e;
+      continue;
+    }
+    // on a tie, prefer deeper
+    if (e.end === best.end && e.depth > best.depth) {
+      best = e;
     }
   }
-  return error;
+
+  if (!best) return null;
+  const pos = best.end;
+  return { start: pos, end: pos };
 }
 
-function splitTraces(trace: TraceHistory): { ok: boolean, start: number, end: number}[] {
-  const result: { ok: boolean, start: number, end: number}[] = [];
+function splitTraces(
+  trace: TraceHistory,
+): { ok: boolean; depth: number; start: number; end: number }[] {
+  const result: {
+    ok: boolean;
+    depth: number;
+    start: number;
+    end: number;
+  }[] = [];
   for (let i = 0; i < trace.length; i += 4) {
-    result.push({ ok: trace[i] >= 0, start: trace[i + 2], end: trace[i + 3] });
+    result.push({
+      ok: trace[i] >= 0,
+      depth: trace[i + 1],
+      start: trace[i + 2],
+      end: trace[i + 3]
+    });
   }
   return result;
 }
