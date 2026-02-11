@@ -59,29 +59,31 @@ export function generateErrorOutput(
 }
 
 /**
- * Recursively find the first error location in a Metadata tree.
+ * Find the furthest error in a TraceHistory
  * Returns { start, end } or null if none.
  */
 export function findError(
   trace: TraceHistory,
 ): { end: number; start: number } | null {
-  let offset = trace.length - 4;
-  let error: { start: number; end: number } | null = null;
-  let maxDepth = 0;
-  while (offset >= 0) {
-    if (trace[offset] < 0) {
-      let depth = trace[offset + 1];
-      let start = trace[offset + 2];
-      let end = trace[offset + 3] + 1;
-      if (depth >= maxDepth) {
-        error = { start, end };
-        maxDepth = depth;
-      }
+  let maxStart = -1;
+  let error: { end: number; start: number } | null = null;
+  for (let e of splitTraces(trace)) {
+    if (!e.ok && e.start >= maxStart) {
+      maxStart = e.start;
+      error = e;
     }
-    offset -= 4;
   }
   return error;
 }
+
+function splitTraces(trace: TraceHistory): { ok: boolean, start: number, end: number}[] {
+  const result: { ok: boolean, start: number, end: number}[] = [];
+  for (let i = 0; i < trace.length; i += 4) {
+    result.push({ ok: trace[i] >= 0, start: trace[i + 2], end: trace[i + 3] });
+  }
+  return result;
+}
+
 
 export function highlightErrors(
   element: HTMLElement,

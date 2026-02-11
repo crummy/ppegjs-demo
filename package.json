@@ -6,6 +6,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "push:preview": "git push preview HEAD:main",
     "astro": "astro",
     "format": "prettier --write ."
   },
