@@ -65,6 +65,7 @@ export function generateErrorOutput(
 export function findError(
   trace: TraceHistory,
   inputLength: number,
+  inputText: string,
 ): { end: number; start: number } | null {
   // In incomplete parses, the top-level rule succeeds but leaves trailing
   // input. Highlight the remaining suffix directly.
@@ -96,7 +97,7 @@ export function findError(
 
   if (!best) return null;
   const pos = best.end;
-  return { start: pos, end: pos };
+  return expandTokenFromPos(inputText, pos);
 }
 
 function findTrailingInput(
@@ -135,6 +136,28 @@ function splitTraces(
     });
   }
   return result;
+}
+
+// Do the best we can to try to guess the length of the "bad" token.
+// This is hackish... but I think the experience is OK.
+// An alternative would be not expanding, and just highlighting the first bad
+// token.
+function expandTokenFromPos(
+  inputText: string,
+  pos: number,
+): { start: number; end: number } {
+  if (pos < 0 || pos >= inputText.length) return { start: pos, end: pos };
+  if (!isTokenChar(inputText[pos])) return { start: pos, end: pos };
+
+  let end = pos;
+  while (end + 1 < inputText.length && isTokenChar(inputText[end + 1])) {
+    end += 1;
+  }
+  return { start: pos, end };
+}
+
+function isTokenChar(ch: string): boolean {
+  return /[A-Za-z0-9_$]/.test(ch);
 }
 
 

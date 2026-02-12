@@ -60,14 +60,18 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     const compiled = ppeg.compile(grammar.innerText);
     if (!compiled.ok) {
       const errorOutput = generateErrorOutput(
-        input.innerText,
+        grammar.innerText,
         compiled.rules,
         compiled.trace_history
       );
       output.textContent = errorOutput.text;
       highlightRanges(output, errorOutput.highlights, "output-error");
       // Highlight all grammar errors with line/column
-      const error = findError(compiled.trace_history, grammar.innerText.length);
+      const error = findError(
+        compiled.trace_history,
+        grammar.innerText.length,
+        grammar.innerText
+      );
       highlightErrors(grammar, error);
     } else {
       const parsed = compiled.parse(input.innerText);
@@ -95,7 +99,11 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           highlightRanges(output, errorOutput.highlights, "output-error");
         }
         // Highlight all input errors with line/column
-        const error = findError(parsed.trace_history, input.innerText.length);
+        const error = findError(
+          parsed.trace_history,
+          input.innerText.length,
+          input.innerText
+        );
         highlightErrors(input, error);
       }
     }
