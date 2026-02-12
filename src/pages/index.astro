@@ -9,7 +9,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
 <script>
   import { ppeg } from "ppegjs";
-  import { debounce } from "../lib/debounce";
 
   import {
     generateSuccessfulOutput,
@@ -68,7 +67,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       output.textContent = errorOutput.text;
       highlightRanges(output, errorOutput.highlights, "output-error");
       // Highlight all grammar errors with line/column
-      const error = findError(compiled.trace_history);
+      const error = findError(compiled.trace_history, grammar.innerText.length);
       highlightErrors(grammar, error);
     } else {
       const parsed = compiled.parse(input.innerText);
@@ -96,7 +95,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           highlightRanges(output, errorOutput.highlights, "output-error");
         }
         // Highlight all input errors with line/column
-        const error = findError(parsed.trace_history);
+        const error = findError(parsed.trace_history, input.innerText.length);
         highlightErrors(input, error);
       }
     }
@@ -186,6 +185,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     ::highlight(grammar-error),
     ::highlight(input-error),
     ::highlight(output-error) {
+      content: "!";
       background-color: #ffb3ba !important;
       border-bottom: 2px solid red;
     }

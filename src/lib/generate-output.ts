@@ -64,7 +64,13 @@ export function generateErrorOutput(
  */
 export function findError(
   trace: TraceHistory,
+  inputLength: number,
 ): { end: number; start: number } | null {
+  // In incomplete parses, the top-level rule succeeds but leaves trailing
+  // input. Highlight the remaining suffix directly.
+  const trailing = findTrailingInput(trace, inputLength);
+  if (trailing) return trailing;
+
   let best: {
     start: number;
     end: number;
@@ -91,6 +97,24 @@ export function findError(
   if (!best) return null;
   const pos = best.end;
   return { start: pos, end: pos };
+}
+
+function findTrailingInput(
+  trace: TraceHistory,
+  inputLength: number,
+): { start: number; end: number } | null {
+  let topLevelEnd = -1;
+  for (let i = 0; i < trace.length; i += 4) {
+    const ruleId = trace[i];
+    const depth = trace[i + 1];
+    const end = trace[i + 3];
+    if (ruleId >= 0 && depth === 0 && end > topLevelEnd) {
+      topLevelEnd = end;
+    }
+  }
+
+  if (topLevelEnd < 0 || topLevelEnd >= inputLength) return null;
+  return { start: topLevelEnd, end: inputLength - 1 };
 }
 
 function splitTraces(
