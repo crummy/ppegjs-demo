@@ -32,7 +32,6 @@ export const restoreSelectionOffsets = (
   let endNode: Node | null = null;
   let startOffset = 0;
   let endOffset = 0;
-
   let node: Node | null;
   while ((node = walker.nextNode())) {
     const textLength = node.nodeValue?.length ?? 0;
