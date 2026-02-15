@@ -147,6 +147,10 @@ function expandTokenFromPos(
   pos: number,
 ): { start: number; end: number } {
   if (pos < 0 || pos >= inputText.length) return { start: pos, end: pos };
+  if (inputText[pos] == '\n' || inputText[pos] == '\r') {
+    // newline? try to highlight char before to after
+    return { start: Math.max(0, pos - 1), end: Math.min(inputText.length, pos + 1)}
+  }
   if (!isTokenChar(inputText[pos])) return { start: pos, end: pos };
 
   let end = pos;
@@ -165,7 +169,7 @@ export function highlightErrors(
   element: HTMLElement,
   error: { start: number; end: number } | null,
 ) {
-  const text = element.innerText;
+  const text = element.textContent ?? "";
   const highlightName = `${element.id || "input"}-error`;
 
   const highlightRegistry = (CSS as unknown as { highlights?: any }).highlights;
@@ -211,7 +215,7 @@ export function highlightRanges(
   ranges: { start: number; end: number }[],
   highlightName: string,
 ) {
-  const text = element.innerText;
+  const text = element.textContent ?? "";
   const highlightRegistry = (CSS as unknown as { highlights?: any }).highlights;
   const HighlightCtor = (globalThis as unknown as { Highlight?: any })
     .Highlight;

@@ -57,10 +57,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   };
 
   const run = () => {
-    const compiled = ppeg.compile(grammar.innerText);
+    const grammarText = grammar.textContent ?? "";
+    const inputText = input.textContent ?? "";
+    const compiled = ppeg.compile(grammarText);
     if (!compiled.ok) {
       const errorOutput = generateErrorOutput(
-        grammar.innerText,
+        grammarText,
         compiled.rules,
         compiled.trace_history
       );
@@ -69,18 +71,18 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       // Highlight all grammar errors with line/column
       const error = findError(
         compiled.trace_history,
-        grammar.innerText.length,
-        grammar.innerText
+        grammarText.length,
+        grammarText
       );
       highlightErrors(grammar, error);
     } else {
-      const parsed = compiled.parse(input.innerText);
+      const parsed = compiled.parse(inputText);
       console.log(parsed);
 
       const showJson = jsonCheckbox.checked;
       if (parsed.ok) {
         if (showJson) {
-          output.innerText = JSON.stringify(parsed.ptree, null, 2);
+          output.textContent = JSON.stringify(parsed.ptree, null, 2);
         } else {
           output.innerHTML = generateSuccessfulOutput(parsed.ptree);
         }
@@ -88,10 +90,10 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         highlightErrors(input, null)
       } else {
         if (showJson) {
-          output.innerText = parsed.show_err();
+          output.textContent = parsed.show_err();
         } else {
           const errorOutput = generateErrorOutput(
-            input.innerText,
+            inputText,
             parsed.rules,
             parsed.trace_history
           );
@@ -101,8 +103,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         // Highlight all input errors with line/column
         const error = findError(
           parsed.trace_history,
-          input.innerText.length,
-          input.innerText
+          inputText.length,
+          inputText
         );
         highlightErrors(input, error);
       }
