@@ -1,5 +1,24 @@
 import type { Exp, TraceHistory } from "ppegjs/pPEG.mjs";
 
+type GrammarCompileError = {
+  type?: string;
+  message?: string;
+  line?: number;
+  column?: number;
+  fault_rule?: string;
+  expected?: unknown;
+  found?: unknown;
+  location?: string;
+  rule?: string;
+};
+
+type GrammarCompileFailure = {
+  ok: false;
+  error?: GrammarCompileError;
+  rules?: string[];
+  trace_history?: TraceHistory;
+};
+
 // TODO ideally we would be returning DOM elements, not a string
 export function generateSuccessfulOutput(
   tree: Exp | string,
@@ -54,6 +73,45 @@ export function generateErrorOutput(
 
     text += "\n";
   }
+
+  return { text, highlights };
+}
+
+export function generateGrammarCompileErrorOutput(
+  grammarText: string,
+  compiled: GrammarCompileFailure,
+): {
+  text: string;
+  highlights: { start: number; end: number }[];
+} {
+  const error = compiled.error ?? {};
+  const message = error.message ?? "Unknown grammar compile error.";
+  const lines: string[] = [
+    "Grammar compile error",
+    `${error.type}: ${message}`,
+  ];
+  const highlights: { start: number; end: number }[] = [];
+
+  if (error.fault_rule) lines.push(`Fault rule: ${error.fault_rule}`);
+  if (typeof error.rule === "string" && error.rule.length > 0) {
+    lines.push(`In rule: ${error.rule}`);
+    const ruleRange = findRuleDefinitionRange(grammarText, error.rule);
+    if (ruleRange) {
+      highlights.push(ruleRange);
+    }
+  }
+
+  if (error.column && error.line) {
+    lines.push(`Location: Line ${error.line}, col ${error.column}`);
+    const offset = extractOffsetFromLineColumn(
+      grammarText,
+      error.line,
+      error.column,
+    );
+    highlights.push({ start: offset, end: offset });
+  }
+
+  const text = lines.join("\n");
 
   return { text, highlights };
 }
@@ -132,10 +190,57 @@ function splitTraces(
       ok: trace[i] >= 0,
       depth: trace[i + 1],
       start: trace[i + 2],
-      end: trace[i + 3]
+      end: trace[i + 3],
     });
   }
   return result;
+}
+
+function extractOffsetFromLineColumn(
+  inputText: string,
+  line: number,
+  column: number,
+): number {
+  const targetLine = Math.max(1, line);
+  const targetColumn = Math.max(1, column);
+
+  let currentLine = 1;
+  let i = 0;
+  while (i < inputText.length && currentLine < targetLine) {
+    if (inputText[i] === "\n") {
+      currentLine += 1;
+    }
+    i += 1;
+  }
+  return Math.max(0, Math.min(i + targetColumn - 1, inputText.length));
+}
+
+function findRuleDefinitionRange(
+  grammarText: string,
+  ruleName: string,
+): { start: number; end: number } | null {
+  if (!ruleName) return null;
+
+  const escapedRuleName = escapeRegExp(ruleName);
+  const pattern = new RegExp(
+    `(^|\\r?\\n)([ \\t]*)(${escapedRuleName})([ \\t]*)=`,
+    "m",
+  );
+  const match = pattern.exec(grammarText);
+  if (!match) {
+    return null;
+  }
+
+  const prefix = match[1] ?? "";
+  const indentation = match[2] ?? "";
+  const name = match[3] ?? ruleName;
+  const start = match.index + prefix.length + indentation.length;
+  const end = start + Math.max(0, name.length - 1);
+  return { start, end };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // Do the best we can to try to guess the length of the "bad" token.
@@ -147,9 +252,12 @@ function expandTokenFromPos(
   pos: number,
 ): { start: number; end: number } {
   if (pos < 0 || pos >= inputText.length) return { start: pos, end: pos };
-  if (inputText[pos] == '\n' || inputText[pos] == '\r') {
+  if (inputText[pos] == "\n" || inputText[pos] == "\r") {
     // newline? try to highlight char before to after
-    return { start: Math.max(0, pos - 1), end: Math.min(inputText.length, pos + 1)}
+    return {
+      start: Math.max(0, pos - 1),
+      end: Math.min(inputText.length, pos + 1),
+    };
   }
   if (!isTokenChar(inputText[pos])) return { start: pos, end: pos };
 
@@ -164,7 +272,6 @@ function isTokenChar(ch: string): boolean {
   return /[A-Za-z0-9_$]/.test(ch);
 }
 
-
 export function highlightErrors(
   element: HTMLElement,
   error: { start: number; end: number } | null,
@@ -172,12 +279,10 @@ export function highlightErrors(
   const text = element.textContent ?? "";
   const highlightName = `${element.id || "input"}-error`;
 
-  const highlightRegistry = (CSS as unknown as { highlights?: any }).highlights;
-  const HighlightCtor = (globalThis as unknown as { Highlight?: any })
-    .Highlight;
+  const highlightRegistry = CSS.highlights;
 
   element.textContent = text;
-  if (!highlightRegistry || !HighlightCtor) {
+  if (!highlightRegistry) {
     return;
   }
   highlightRegistry.delete(highlightName);
@@ -206,43 +311,6 @@ export function highlightErrors(
     const domRange = document.createRange();
     domRange.setStart(textNode, start);
     domRange.setEnd(textNode, endExclusive);
-    highlightRegistry.set(highlightName, new HighlightCtor(domRange));
-  }
-}
-
-export function highlightRanges(
-  element: HTMLElement,
-  ranges: { start: number; end: number }[],
-  highlightName: string,
-) {
-  const text = element.textContent ?? "";
-  const highlightRegistry = (CSS as unknown as { highlights?: any }).highlights;
-  const HighlightCtor = (globalThis as unknown as { Highlight?: any })
-    .Highlight;
-
-  element.textContent = text;
-  if (!highlightRegistry || !HighlightCtor) {
-    return;
-  }
-  highlightRegistry.delete(highlightName);
-
-  if (!ranges.length) return;
-
-  const textNode = element.firstChild;
-  if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
-
-  const domRanges: Range[] = [];
-  for (const range of ranges) {
-    const start = Math.min(Math.max(0, range.start), text.length);
-    const endExclusive = Math.min(Math.max(0, range.end + 1), text.length);
-    if (endExclusive <= start) continue;
-    const domRange = document.createRange();
-    domRange.setStart(textNode, start);
-    domRange.setEnd(textNode, endExclusive);
-    domRanges.push(domRange);
-  }
-
-  if (domRanges.length) {
-    highlightRegistry.set(highlightName, new HighlightCtor(...domRanges));
+    highlightRegistry.set(highlightName, new Highlight(domRange));
   }
 }

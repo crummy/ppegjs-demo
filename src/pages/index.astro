@@ -13,8 +13,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import {
     generateSuccessfulOutput,
     findError,
-    highlightRanges,
     generateErrorOutput,
+    generateGrammarCompileErrorOutput,
     highlightErrors,
   } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
@@ -57,27 +57,23 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   };
 
   const run = () => {
+    CSS.highlights?.clear();
+
     const grammarText = grammar.textContent ?? "";
     const inputText = input.textContent ?? "";
     const compiled = ppeg.compile(grammarText);
     if (!compiled.ok) {
-      const errorOutput = generateErrorOutput(
+      console.error(compiled);
+      const errorOutput = generateGrammarCompileErrorOutput(
         grammarText,
-        compiled.rules,
-        compiled.trace_history
+        compiled,
       );
       output.textContent = errorOutput.text;
-      highlightRanges(output, errorOutput.highlights, "output-error");
-      // Highlight all grammar errors with line/column
-      const error = findError(
-        compiled.trace_history,
-        grammarText.length,
-        grammarText
-      );
-      highlightErrors(grammar, error);
+      // Highlight the grammar fault location when available.
+      highlightErrors(grammar, errorOutput.highlights[0]);
     } else {
+      // Grammar is valid, so clear any stale grammar highlight.
       const parsed = compiled.parse(inputText);
-      console.log(parsed);
 
       const showJson = jsonCheckbox.checked;
       if (parsed.ok) {
@@ -86,8 +82,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         } else {
           output.innerHTML = generateSuccessfulOutput(parsed.ptree);
         }
-        // reset highlights
-        highlightErrors(input, null)
       } else {
         if (showJson) {
           output.textContent = parsed.show_err();
@@ -95,16 +89,15 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           const errorOutput = generateErrorOutput(
             inputText,
             parsed.rules,
-            parsed.trace_history
+            parsed.trace_history,
           );
           output.textContent = errorOutput.text;
-          highlightRanges(output, errorOutput.highlights, "output-error");
         }
-        // Highlight all input errors with line/column
+        // Highlight input error with line/column
         const error = findError(
           parsed.trace_history,
           inputText.length,
-          inputText
+          inputText,
         );
         highlightErrors(input, error);
       }
@@ -193,8 +186,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
 
     ::highlight(grammar-error),
-    ::highlight(input-error),
-    ::highlight(output-error) {
+    ::highlight(input-error) {
       content: "!";
       background-color: #ffb3ba !important;
       border-bottom: 2px solid red;
@@ -251,13 +243,19 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         </select>
       </span>
     </div>
-    <div class="content-container" id="grammar" contenteditable="plaintext-only"></div>
+    <div
+      class="content-container"
+      id="grammar"
+      contenteditable="plaintext-only"
+    >
+    </div>
   </div>
   <div class="input">
     <div class="header">
       <label for="input">Input</label>
     </div>
-    <div class="content-container" id="input" contenteditable="plaintext-only"></div>
+    <div class="content-container" id="input" contenteditable="plaintext-only">
+    </div>
   </div>
   <div class="output">
     <div class="header">
