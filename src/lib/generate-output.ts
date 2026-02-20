@@ -68,7 +68,9 @@ export function generateErrorOutput(
     text += line;
 
     if (ruleIdx < 0 && line.length > 0) {
-      highlights.push({ start: lineStart, end: lineStart + line.length - 1 });
+      const start = lineStart + prefix.length
+      const end = lineStart + prefix.length + ruleName.length - 1;
+      highlights.push({ start, end });
     }
 
     text += "\n";
@@ -274,7 +276,7 @@ function isTokenChar(ch: string): boolean {
 
 export function highlightErrors(
   element: HTMLElement,
-  error: { start: number; end: number } | null,
+  errors: { start: number; end: number }[],
 ) {
   const text = element.textContent ?? "";
   const highlightName = `${element.id || "input"}-error`;
@@ -285,32 +287,33 @@ export function highlightErrors(
   if (!highlightRegistry) {
     return;
   }
-  highlightRegistry.delete(highlightName);
-
-  if (!error) {
-    return;
-  }
-
-  const range = {
-    start: Math.max(0, error.start),
-    end: Math.max(0, error.end),
-  };
-  if (range.end < range.start) {
-    return;
-  }
 
   const textNode = element.firstChild;
   if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
     return;
   }
 
-  const start = Math.min(range.start, text.length);
-  const endExclusive = Math.min(range.end + 1, text.length);
+  const highlight = new Highlight();
 
-  if (start < text.length && endExclusive > start) {
-    const domRange = document.createRange();
-    domRange.setStart(textNode, start);
-    domRange.setEnd(textNode, endExclusive);
-    highlightRegistry.set(highlightName, new Highlight(domRange));
+  for (const error of errors) {
+    const range = {
+      start: Math.max(0, error.start),
+      end: Math.max(0, error.end),
+    };
+    if (range.end < range.start) {
+      return;
+    }
+
+    const start = Math.min(range.start, text.length);
+    const endExclusive = Math.min(range.end + 1, text.length);
+
+    if (start < text.length && endExclusive > start) {
+      const domRange = document.createRange();
+      domRange.setStart(textNode, start);
+      domRange.setEnd(textNode, endExclusive);
+      highlight.add(domRange);
+    }
   }
+
+  highlightRegistry.set(highlightName, highlight);
 }

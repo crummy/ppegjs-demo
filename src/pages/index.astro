@@ -70,7 +70,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       );
       output.textContent = errorOutput.text;
       // Highlight the grammar fault location when available.
-      highlightErrors(grammar, errorOutput.highlights[0]);
+      highlightErrors(grammar, errorOutput.highlights);
     } else {
       // Grammar is valid, so clear any stale grammar highlight.
       const parsed = compiled.parse(inputText);
@@ -92,6 +92,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
             parsed.trace_history,
           );
           output.textContent = errorOutput.text;
+          highlightErrors(output, errorOutput.highlights);
         }
         // Highlight input error with line/column
         const error = findError(
@@ -99,7 +100,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           inputText.length,
           inputText,
         );
-        highlightErrors(input, error);
+        highlightErrors(input, error ? [error] : []);
       }
     }
   };
@@ -190,7 +191,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
 
     ::highlight(grammar-error),
-    ::highlight(input-error) {
+    ::highlight(input-error),
+    ::highlight(output-error) {
       content: "!";
       background-color: #ffb3ba !important;
       border-bottom: 2px solid red;
