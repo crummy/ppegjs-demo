@@ -5,7 +5,10 @@ export const getSelectionOffsets = (root: HTMLElement) => {
   if (!selection || selection.rangeCount === 0) return null;
 
   const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+  if (
+    !root.contains(range.startContainer) ||
+    !root.contains(range.endContainer)
+  ) {
     return null;
   }
 
@@ -22,7 +25,7 @@ export const getSelectionOffsets = (root: HTMLElement) => {
 export const restoreSelectionOffsets = (
   root: HTMLElement,
   start: number,
-  end: number
+  end: number,
 ) => {
   const range = document.createRange();
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -32,7 +35,6 @@ export const restoreSelectionOffsets = (
   let endNode: Node | null = null;
   let startOffset = 0;
   let endOffset = 0;
-
   let node: Node | null;
   while ((node = walker.nextNode())) {
     const textLength = node.nodeValue?.length ?? 0;

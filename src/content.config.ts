@@ -38,17 +38,11 @@ type PTree = [
 
 type ParseTree = [string, string | ParseTree[]];
 
-type TranslatedValue =
-  | string
-  | TranslatedNode[]
-  | Record<string, unknown>;
+type TranslatedValue = string | TranslatedNode[] | Record<string, unknown>;
 
 type TranslatedNode = [string, TranslatedValue];
 
-type TransformFn = (
-  tree: ParseTree,
-  transform: TransformMap,
-) => TranslatedNode;
+type TransformFn = (tree: ParseTree, transform: TransformMap) => TranslatedNode;
 
 type TransformMap = Record<string, TransformFn>;
 

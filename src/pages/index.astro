@@ -9,9 +9,14 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
 <script>
   import { ppeg } from "ppegjs";
-  import { debounce } from "../lib/debounce";
 
-  import { generateOutput, findError } from "../lib/generate-output";
+  import {
+    generateSuccessfulOutput,
+    findError,
+    generateErrorOutput,
+    generateGrammarCompileErrorOutput,
+    highlightErrors,
+  } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
 
   // A little helper to save us from doing null checks later
@@ -27,15 +32,31 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const output = getElement<HTMLDivElement>("#output");
   const jsonCheckbox = getElement<HTMLInputElement>("#json");
 
-  const load = () => {
-    const selected = examplesSelect.value;
-    const option = getElement<HTMLOptionElement>(`#option-${selected}`);
-    input.textContent = option.dataset.input ?? "";
-    grammar.textContent = option.dataset.grammar ?? "";
-    runWithCaret();
+  type CompileOutput = ReturnType<typeof ppeg.compile>;
+  type CompiledOk = Extract<CompileOutput, { ok: true }>;
+  type ParseOutput = ReturnType<CompiledOk["parse"]>;
+
+  type DemoState = {
+    selectedExample: string;
+    grammarText: string;
+    inputText: string;
+    showJson: boolean;
+    compileOutput: CompileOutput | null;
+    parseOutput: ParseOutput | null;
   };
 
-  const debouncedRun = debounce(() => runWithCaret(), 300);
+  const State: DemoState = {
+    selectedExample: examplesSelect.value,
+    grammarText: "",
+    inputText: "",
+    showJson: jsonCheckbox.checked,
+    compileOutput: null,
+    parseOutput: null,
+  };
+
+  const updateState = (partial: Partial<DemoState>) => {
+    Object.assign(State, partial);
+  };
 
   // saves the current cursor location, compiles, then restores the location
   // necessary to ensure cursor location isn't reset after highlighting
@@ -45,7 +66,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       active === input || active === grammar ? (active as HTMLElement) : null;
     const selection = target ? getSelectionOffsets(target) : null;
 
-    run();
+    compile();
+    render();
 
     if (target && selection) {
       target.focus();
@@ -53,96 +75,102 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
   };
 
-  const run = () => {
-    const compiled = ppeg.compile(grammar.innerText);
-    if (!compiled.ok) {
-      output.innerHTML = generateOutput(compiled.ptree_metadata);
-      // Highlight all grammar errors with line/column
-      const error = findError(compiled.ptree_metadata);
-      grammar.innerHTML = highlightErrors(grammar.innerText, error);
-    } else {
-      const parsed = compiled.parse(input.innerText);
-      console.log(parsed);
-
-      const showJson = jsonCheckbox.checked;
-      if (!showJson) {
-        output.innerHTML = generateOutput(parsed.ptree_metadata);
-      }
-
-      if (parsed.ok) {
-        // Figure out how to handle highlights for showJson later
-        if (showJson) {
-          output.innerText = JSON.stringify(parsed.ptree, null, 2);
-        }
-        input.innerHTML = input.innerText; // clear any error highlights
-      } else {
-        if (showJson) {
-          output.innerText = parsed.show_err();
-        }
-        // Highlight all input errors with line/column
-        const error = findError(parsed.ptree_metadata);
-        input.innerHTML = highlightErrors(input.innerText, error);
-      }
+  const compile = () => {
+    const compileOutput = ppeg.compile(State.grammarText);
+    if (!compileOutput.ok) {
+      updateState({ compileOutput, parseOutput: null });
+      return;
     }
+    const parseOutput = compileOutput.parse(State.inputText);
+    updateState({ compileOutput, parseOutput });
   };
 
-  // this assumes errors are a range... is that necessary? or are they always
-  // just one character?
-  function highlightErrors(
-    text: string,
-    error: { start: number; end: number } | null,
-  ) {
-    if (!error) return text;
+  const render = () => {
+    if (examplesSelect.value !== State.selectedExample) {
+      examplesSelect.value = State.selectedExample;
+    }
+    if (grammar.textContent !== State.grammarText) {
+      grammar.textContent = State.grammarText;
+    }
+    if (input.textContent !== State.inputText) {
+      input.textContent = State.inputText;
+    }
+    if (jsonCheckbox.checked !== State.showJson) {
+      jsonCheckbox.checked = State.showJson;
+    }
 
-    const range = {
-      start: Math.max(0, error.start),
-      end: Math.max(0, error.end),
-    };
-    if (range.end < range.start) return text;
+    let outputText = "";
+    let grammarHighlights: { start: number; end: number }[] = [];
+    let outputHighlights: { start: number; end: number }[] = [];
+    let inputHighlights: { start: number; end: number }[] = [];
 
-    let result = "";
-    let open = false;
-
-    for (let i = 0; i < text.length; i++) {
-      if (!open && i === range.start) {
-        result += `<span class="input-error-highlight">`;
-        open = true;
-      }
-
-      result += text[i];
-
-      if (open && i === range.end) {
-        result += `</span>`;
-        open = false;
+    const compileOutput = State.compileOutput;
+    const parseOutput = State.parseOutput;
+    if (compileOutput && !compileOutput?.ok) {
+      const errorOutput = generateGrammarCompileErrorOutput(
+        State.grammarText,
+        compileOutput,
+      );
+      outputText = errorOutput.text;
+      grammarHighlights = errorOutput.highlights;
+    } else if (parseOutput) {
+      if (parseOutput.ok) {
+        outputText = State.showJson
+          ? JSON.stringify(parseOutput.ptree, null, 2)
+          : generateSuccessfulOutput(parseOutput.ptree);
+      } else {
+        const errorOutput = generateErrorOutput(
+          State.inputText,
+          parseOutput.rules,
+          parseOutput.trace_history,
+        );
+        outputText = errorOutput.text;
+        outputHighlights = errorOutput.highlights;
+        const error = findError(
+          parseOutput.trace_history,
+          State.inputText.length,
+          State.inputText,
+        );
+        inputHighlights = error ? [error] : [];
       }
     }
 
-    // special handling for errors past the end of the input - e.g. an extra
-    // character. have to put a little special unselectable span.
-    if (open) {
-      if (range.start < text.length) {
-        // Range extends past the end; show a placeholder highlight cell.
-        result += `</span><span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
-        open = false;
-      }
-    }
+    output.textContent = outputText;
+    CSS.highlights?.clear();
+    highlightErrors(grammar, grammarHighlights);
+    highlightErrors(output, outputHighlights);
+    highlightErrors(input, inputHighlights);
+  };
 
-    if (range.start >= text.length) {
-      // Range starts at/after end; show a placeholder highlight cell.
-      result += `<span class="input-error-highlight input-error-placeholder" contenteditable="false"></span>`;
-    }
+  const loadSelectedExample = (selected: string) => {
+    const option = getElement<HTMLOptionElement>(`#option-${selected}`);
+    updateState({
+      selectedExample: selected,
+      grammarText: option.dataset.grammar ?? "",
+      inputText: option.dataset.input ?? "",
+    });
+    runWithCaret();
+  };
 
-    return result;
-  }
+  examplesSelect.addEventListener("change", () => {
+    loadSelectedExample(examplesSelect.value);
+  });
 
-  examplesSelect.addEventListener("change", load);
+  jsonCheckbox.addEventListener("change", () => {
+    updateState({ showJson: jsonCheckbox.checked });
+    runWithCaret();
+  });
 
-  jsonCheckbox.addEventListener("change", runWithCaret);
+  input.addEventListener("input", () => {
+    updateState({ inputText: input.textContent ?? "" });
+    runWithCaret();
+  });
+  grammar.addEventListener("input", () => {
+    updateState({ grammarText: grammar.textContent ?? "" });
+    runWithCaret();
+  });
 
-  input.addEventListener("input", debouncedRun);
-  grammar.addEventListener("input", debouncedRun);
-
-  load();
+  loadSelectedExample(State.selectedExample);
 </script>
 
 <Layout>
@@ -170,6 +198,13 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       font-family:
         "Courier Line Draw", "Courier Prime", "Courier New", monospace;
       resize: none;
+    }
+
+    #output {
+      white-space: pre;
+    }
+
+    .content-container {
       overflow-y: scroll;
     }
 
@@ -213,25 +248,11 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       align-items: center;
     }
 
-    .grammar-error-highlight {
+    ::highlight(grammar-error),
+    ::highlight(input-error),
+    ::highlight(output-error) {
+      content: "!";
       background-color: #ffb3ba !important;
-      border-bottom: 2px solid red;
-    }
-    .input-error-highlight {
-      background-color: #ffb3ba !important;
-      border-bottom: 2px solid red;
-    }
-    .input-error-placeholder {
-      display: inline-block;
-      position: relative;
-      vertical-align: baseline;
-      user-select: none;
-      pointer-events: none;
-    }
-    .input-error-placeholder::after {
-      content: " ";
-      display: inline-block;
-      background-color: #ffb3ba;
       border-bottom: 2px solid red;
     }
 
@@ -286,13 +307,19 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         </select>
       </span>
     </div>
-    <div class="content-container" id="grammar" contenteditable></div>
+    <div
+      class="content-container"
+      id="grammar"
+      contenteditable="plaintext-only"
+    >
+    </div>
   </div>
   <div class="input">
     <div class="header">
       <label for="input">Input</label>
     </div>
-    <div class="content-container" id="input" contenteditable></div>
+    <div class="content-container" id="input" contenteditable="plaintext-only">
+    </div>
   </div>
   <div class="output">
     <div class="header">
