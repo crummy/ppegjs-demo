@@ -19,7 +19,6 @@ type GrammarCompileFailure = {
   trace_history?: TraceHistory;
 };
 
-// TODO ideally we would be returning DOM elements, not a string
 export function generateSuccessfulOutput(
   tree: Exp | string,
   indent = 0,
@@ -278,20 +277,13 @@ export function highlightErrors(
   element: HTMLElement,
   errors: { start: number; end: number }[],
 ) {
+  const textNode = element.firstChild;
+  if (!CSS.highlights || textNode?.nodeType !== Node.TEXT_NODE) {
+    return;
+  }
+
   const text = element.textContent ?? "";
   const highlightName = `${element.id || "input"}-error`;
-
-  const highlightRegistry = CSS.highlights;
-
-  element.textContent = text;
-  if (!highlightRegistry) {
-    return;
-  }
-
-  const textNode = element.firstChild;
-  if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
-    return;
-  }
 
   const highlight = new Highlight();
 
@@ -315,5 +307,5 @@ export function highlightErrors(
     }
   }
 
-  highlightRegistry.set(highlightName, highlight);
+  CSS.highlights.set(highlightName, highlight);
 }

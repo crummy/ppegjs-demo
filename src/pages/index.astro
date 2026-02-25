@@ -32,12 +32,30 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const output = getElement<HTMLDivElement>("#output");
   const jsonCheckbox = getElement<HTMLInputElement>("#json");
 
-  const load = () => {
-    const selected = examplesSelect.value;
-    const option = getElement<HTMLOptionElement>(`#option-${selected}`);
-    input.textContent = option.dataset.input ?? "";
-    grammar.textContent = option.dataset.grammar ?? "";
-    runWithCaret();
+  type CompileOutput = ReturnType<typeof ppeg.compile>;
+  type CompiledOk = Extract<CompileOutput, { ok: true }>;
+  type ParseOutput = ReturnType<CompiledOk["parse"]>;
+
+  type DemoState = {
+    selectedExample: string;
+    grammarText: string;
+    inputText: string;
+    showJson: boolean;
+    compileOutput: CompileOutput | null;
+    parseOutput: ParseOutput | null;
+  };
+
+  const State: DemoState = {
+    selectedExample: examplesSelect.value,
+    grammarText: "",
+    inputText: "",
+    showJson: jsonCheckbox.checked,
+    compileOutput: null,
+    parseOutput: null,
+  };
+
+  const updateState = (partial: Partial<DemoState>) => {
+    Object.assign(State, partial);
   };
 
   // saves the current cursor location, compiles, then restores the location
@@ -48,7 +66,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       active === input || active === grammar ? (active as HTMLElement) : null;
     const selection = target ? getSelectionOffsets(target) : null;
 
-    run();
+    compile();
+    render();
 
     if (target && selection) {
       target.focus();
@@ -56,63 +75,102 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
   };
 
-  const run = () => {
-    CSS.highlights?.clear();
-
-    const grammarText = grammar.textContent ?? "";
-    const inputText = input.textContent ?? "";
-    const compiled = ppeg.compile(grammarText);
-    if (!compiled.ok) {
-      console.error(compiled);
-      const errorOutput = generateGrammarCompileErrorOutput(
-        grammarText,
-        compiled,
-      );
-      output.textContent = errorOutput.text;
-      // Highlight the grammar fault location when available.
-      highlightErrors(grammar, errorOutput.highlights);
-    } else {
-      // Grammar is valid, so clear any stale grammar highlight.
-      const parsed = compiled.parse(inputText);
-
-      const showJson = jsonCheckbox.checked;
-      if (parsed.ok) {
-        if (showJson) {
-          output.textContent = JSON.stringify(parsed.ptree, null, 2);
-        } else {
-          output.innerHTML = generateSuccessfulOutput(parsed.ptree);
-        }
-      } else {
-        if (showJson) {
-          output.textContent = parsed.show_err();
-        } else {
-          const errorOutput = generateErrorOutput(
-            inputText,
-            parsed.rules,
-            parsed.trace_history,
-          );
-          output.textContent = errorOutput.text;
-          highlightErrors(output, errorOutput.highlights);
-        }
-        // Highlight input error with line/column
-        const error = findError(
-          parsed.trace_history,
-          inputText.length,
-          inputText,
-        );
-        highlightErrors(input, error ? [error] : []);
-      }
+  const compile = () => {
+    const compileOutput = ppeg.compile(State.grammarText);
+    if (!compileOutput.ok) {
+      updateState({ compileOutput, parseOutput: null });
+      return;
     }
+    const parseOutput = compileOutput.parse(State.inputText);
+    updateState({ compileOutput, parseOutput });
   };
 
-  examplesSelect.addEventListener("change", load);
+  const render = () => {
+    if (examplesSelect.value !== State.selectedExample) {
+      examplesSelect.value = State.selectedExample;
+    }
+    if (grammar.textContent !== State.grammarText) {
+      grammar.textContent = State.grammarText;
+    }
+    if (input.textContent !== State.inputText) {
+      input.textContent = State.inputText;
+    }
+    if (jsonCheckbox.checked !== State.showJson) {
+      jsonCheckbox.checked = State.showJson;
+    }
 
-  jsonCheckbox.addEventListener("change", runWithCaret);
+    let outputText = "";
+    let grammarHighlights: { start: number; end: number }[] = [];
+    let outputHighlights: { start: number; end: number }[] = [];
+    let inputHighlights: { start: number; end: number }[] = [];
 
-  input.addEventListener("input", runWithCaret);
-  grammar.addEventListener("input", runWithCaret);
+    const compileOutput = State.compileOutput;
+    const parseOutput = State.parseOutput;
+    if (compileOutput && !compileOutput?.ok) {
+      const errorOutput = generateGrammarCompileErrorOutput(
+        State.grammarText,
+        compileOutput,
+      );
+      outputText = errorOutput.text;
+      grammarHighlights = errorOutput.highlights;
+    } else if (parseOutput) {
+      if (parseOutput.ok) {
+        outputText = State.showJson
+          ? JSON.stringify(parseOutput.ptree, null, 2)
+          : generateSuccessfulOutput(parseOutput.ptree);
+      } else {
+        const errorOutput = generateErrorOutput(
+          State.inputText,
+          parseOutput.rules,
+          parseOutput.trace_history,
+        );
+        outputText = errorOutput.text;
+        outputHighlights = errorOutput.highlights;
+        const error = findError(
+          parseOutput.trace_history,
+          State.inputText.length,
+          State.inputText,
+        );
+        inputHighlights = error ? [error] : [];
+      }
+    }
 
-  load();
+    output.textContent = outputText;
+    CSS.highlights?.clear();
+    highlightErrors(grammar, grammarHighlights);
+    highlightErrors(output, outputHighlights);
+    highlightErrors(input, inputHighlights);
+  };
+
+  const loadSelectedExample = (selected: string) => {
+    const option = getElement<HTMLOptionElement>(`#option-${selected}`);
+    updateState({
+      selectedExample: selected,
+      grammarText: option.dataset.grammar ?? "",
+      inputText: option.dataset.input ?? "",
+    });
+    runWithCaret();
+  };
+
+  examplesSelect.addEventListener("change", () => {
+    loadSelectedExample(examplesSelect.value);
+  });
+
+  jsonCheckbox.addEventListener("change", () => {
+    updateState({ showJson: jsonCheckbox.checked });
+    runWithCaret();
+  });
+
+  input.addEventListener("input", () => {
+    updateState({ inputText: input.textContent ?? "" });
+    runWithCaret();
+  });
+  grammar.addEventListener("input", () => {
+    updateState({ grammarText: grammar.textContent ?? "" });
+    runWithCaret();
+  });
+
+  loadSelectedExample(State.selectedExample);
 </script>
 
 <Layout>
