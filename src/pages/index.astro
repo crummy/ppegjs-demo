@@ -11,9 +11,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { ppeg } from "ppegjs";
 
   import {
-    generateSuccessfulOutput,
+    generateTreeOutput,
     findError,
-    generateErrorOutput,
+    generateTraceOutput,
     generateGrammarCompileErrorOutput,
     highlightErrors,
   } from "../lib/generate-output";
@@ -30,17 +30,27 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const grammar = getElement<HTMLDivElement>("#grammar");
   const input = getElement<HTMLDivElement>("#input");
   const output = getElement<HTMLDivElement>("#output");
-  const jsonCheckbox = getElement<HTMLInputElement>("#json");
+  const outputModeRadios = document.querySelectorAll<HTMLInputElement>(
+    'input[name="output-mode"]',
+  );
+  const outputModeFromDom = (): OutputMode => {
+    const selected = Array.from(outputModeRadios).find((r) => r.checked)?.value;
+    if (selected === "trace" || selected === "json") {
+      return selected;
+    }
+    return "tree";
+  };
 
   type CompileOutput = ReturnType<typeof ppeg.compile>;
   type CompiledOk = Extract<CompileOutput, { ok: true }>;
   type ParseOutput = ReturnType<CompiledOk["parse"]>;
+  type OutputMode = "tree" | "trace" | "json";
 
   type DemoState = {
     selectedExample: string;
     grammarText: string;
     inputText: string;
-    showJson: boolean;
+    outputMode: OutputMode;
     compileOutput: CompileOutput | null;
     parseOutput: ParseOutput | null;
   };
@@ -49,7 +59,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     selectedExample: examplesSelect.value,
     grammarText: "",
     inputText: "",
-    showJson: jsonCheckbox.checked,
+    outputMode: outputModeFromDom(),
     compileOutput: null,
     parseOutput: null,
   };
@@ -78,11 +88,15 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const compile = () => {
     const compileOutput = ppeg.compile(State.grammarText);
     if (!compileOutput.ok) {
-      updateState({ compileOutput, parseOutput: null });
+      updateState({ compileOutput, parseOutput: null, outputMode: "trace" });
       return;
     }
     const parseOutput = compileOutput.parse(State.inputText);
-    updateState({ compileOutput, parseOutput });
+    if (!parseOutput.ok) {
+      updateState({ compileOutput, parseOutput, outputMode: "trace" });
+    } else {
+      updateState({ compileOutput, parseOutput, outputMode: "tree" });
+    }
   };
 
   const render = () => {
@@ -95,8 +109,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (input.textContent !== State.inputText) {
       input.textContent = State.inputText;
     }
-    if (jsonCheckbox.checked !== State.showJson) {
-      jsonCheckbox.checked = State.showJson;
+    for (const radio of outputModeRadios) {
+      radio.checked = radio.value === State.outputMode;
     }
 
     let outputText = "";
@@ -114,18 +128,22 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       outputText = errorOutput.text;
       grammarHighlights = errorOutput.highlights;
     } else if (parseOutput) {
-      if (parseOutput.ok) {
-        outputText = State.showJson
-          ? JSON.stringify(parseOutput.ptree, null, 2)
-          : generateSuccessfulOutput(parseOutput.ptree);
-      } else {
-        const errorOutput = generateErrorOutput(
+      if (State.outputMode === "json") {
+        outputText = JSON.stringify(parseOutput.ptree, null, 2);
+      } else if (State.outputMode === "trace") {
+        const traceOutput = generateTraceOutput(
           State.inputText,
           parseOutput.rules,
           parseOutput.trace_history,
+          parseOutput.error,
         );
-        outputText = errorOutput.text;
-        outputHighlights = errorOutput.highlights;
+        outputText = traceOutput.text;
+        outputHighlights = traceOutput.highlights;
+      } else {
+        outputText = generateTreeOutput(parseOutput.ptree, parseOutput.error);
+      }
+
+      if (!parseOutput.ok) {
         const error = findError(
           parseOutput.trace_history,
           State.inputText.length,
@@ -156,10 +174,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     loadSelectedExample(examplesSelect.value);
   });
 
-  jsonCheckbox.addEventListener("change", () => {
-    updateState({ showJson: jsonCheckbox.checked });
-    runWithCaret();
-  });
+  for (const radio of outputModeRadios) {
+    radio.addEventListener("change", () => {
+      updateState({ outputMode: outputModeFromDom() });
+      render();
+    });
+  }
 
   input.addEventListener("input", () => {
     updateState({ inputText: input.textContent ?? "" });
@@ -243,9 +263,16 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       justify-content: space-between;
     }
 
-    .json {
+    .output-mode {
       display: flex;
       align-items: center;
+      gap: 0.5rem;
+    }
+
+    .output-mode-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
     }
 
     ::highlight(grammar-error),
@@ -324,10 +351,20 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   <div class="output">
     <div class="header">
       Parse Tree
-      <label class="json">
-        JSON
-        <input type="checkbox" id="json" name="json" />
-      </label>
+      <span class="output-mode">
+        <label class="output-mode-option">
+          <input type="radio" name="output-mode" value="tree" checked />
+          Tree
+        </label>
+        <label class="output-mode-option">
+          <input type="radio" name="output-mode" value="trace" />
+          Trace
+        </label>
+        <label class="output-mode-option">
+          <input type="radio" name="output-mode" value="json" />
+          JSON
+        </label>
+      </span>
     </div>
     <div class="content-container">
       <div id="output"></div>

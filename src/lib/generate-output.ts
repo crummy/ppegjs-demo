@@ -19,8 +19,16 @@ type GrammarCompileFailure = {
   trace_history?: TraceHistory;
 };
 
-export function generateSuccessfulOutput(
+type Error = {
+  column: number;
+  line: number;
+  message: string;
+  type: string;
+};
+
+export function generateTreeOutput(
   tree: Exp | string,
+  error: Error | null,
   indent = 0,
 ): string {
   const prefix = "│ ".repeat(indent);
@@ -35,16 +43,34 @@ export function generateSuccessfulOutput(
   let result = `${prefix}${label}`;
 
   for (const child of value) {
-    result += "\n" + generateSuccessfulOutput(child, indent + 1);
+    result += "\n" + generateTreeOutput(child, null, indent + 1);
+  }
+
+  if (error) {
+    result += "\n\n" + printError(error);
   }
 
   return result;
 }
 
-export function generateErrorOutput(
+function printError(error: Error) {
+  return (
+    "Error '" +
+    error.type +
+    "' at line " +
+    error.line +
+    ", column " +
+    error.column +
+    ":\n" +
+    error.message
+  );
+}
+
+export function generateTraceOutput(
   input: string,
   rules: string[],
   trace: TraceHistory,
+  error: Error | null,
 ): { text: string; highlights: { start: number; end: number }[] } {
   let text = "";
   const highlights: { start: number; end: number }[] = [];
@@ -67,12 +93,16 @@ export function generateErrorOutput(
     text += line;
 
     if (ruleIdx < 0 && line.length > 0) {
-      const start = lineStart + prefix.length
+      const start = lineStart + prefix.length;
       const end = lineStart + prefix.length + ruleName.length - 1;
       highlights.push({ start, end });
     }
 
     text += "\n";
+  }
+
+  if (error) {
+    text += "\n\n" + printError(error);
   }
 
   return { text, highlights };
