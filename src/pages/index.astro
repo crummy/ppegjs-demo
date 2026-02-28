@@ -51,6 +51,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     grammarText: string;
     inputText: string;
     outputMode: OutputMode;
+    error: boolean;
   };
 
   const State: DemoState = {
@@ -58,6 +59,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     grammarText: "",
     inputText: "",
     outputMode: outputModeFromDom(),
+    error: false,
   };
 
   const updateState = (partial: Partial<DemoState>) => {
@@ -73,6 +75,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     const selection = target ? getSelectionOffsets(target) : null;
 
     const { compileOutput, parseOutput } = compile();
+    updateState({ error: (compileOutput.ok === false || parseOutput?.ok === false) });
     render(compileOutput, parseOutput);
 
     if (target && selection) {
@@ -103,6 +106,13 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (input.textContent !== State.inputText) {
       input.textContent = State.inputText;
     }
+
+    document
+      .querySelectorAll(".error-alert")
+      .forEach((e) =>
+        State.error ? e.classList.remove("hidden") : e.classList.add("hidden"),
+      );
+
     for (const radio of outputModeRadios) {
       radio.checked = radio.value === State.outputMode;
     }
@@ -276,6 +286,15 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       border-bottom: 2px solid red;
     }
 
+    .error-alert {
+      flex-grow: 1;
+      padding-left: 0.3em;
+    }
+
+    .hidden {
+      display: none;
+    }
+
     @media (max-width: 768px) {
       body {
         grid-template-areas:
@@ -344,6 +363,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   <div class="output">
     <div class="header">
       Parse Tree
+      <span class="error-alert" title="An error occurred during processing"
+        >⚠️</span
+      >
       <span class="output-mode">
         <label class="output-mode-option">
           <input type="radio" name="output-mode" value="tree" checked />
