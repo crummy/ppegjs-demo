@@ -51,8 +51,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     grammarText: string;
     inputText: string;
     outputMode: OutputMode;
-    compileOutput: CompileOutput | null;
-    parseOutput: ParseOutput | null;
   };
 
   const State: DemoState = {
@@ -60,8 +58,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     grammarText: "",
     inputText: "",
     outputMode: outputModeFromDom(),
-    compileOutput: null,
-    parseOutput: null,
   };
 
   const updateState = (partial: Partial<DemoState>) => {
@@ -76,8 +72,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       active === input || active === grammar ? (active as HTMLElement) : null;
     const selection = target ? getSelectionOffsets(target) : null;
 
-    compile();
-    render();
+    const { compileOutput, parseOutput } = compile();
+    render(compileOutput, parseOutput);
 
     if (target && selection) {
       target.focus();
@@ -85,21 +81,19 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
   };
 
-  const compile = () => {
+  const compile = (): {
+    compileOutput: CompileOutput;
+    parseOutput: ParseOutput | null;
+  } => {
     const compileOutput = ppeg.compile(State.grammarText);
     if (!compileOutput.ok) {
-      updateState({ compileOutput, parseOutput: null, outputMode: "trace" });
-      return;
+      return { compileOutput, parseOutput: null };
     }
     const parseOutput = compileOutput.parse(State.inputText);
-    if (!parseOutput.ok) {
-      updateState({ compileOutput, parseOutput, outputMode: "trace" });
-    } else {
-      updateState({ compileOutput, parseOutput, outputMode: "tree" });
-    }
+    return { compileOutput, parseOutput };
   };
 
-  const render = () => {
+  const render = (compileOutput: CompileOutput, parseOutput: ParseOutput) => {
     if (examplesSelect.value !== State.selectedExample) {
       examplesSelect.value = State.selectedExample;
     }
@@ -118,8 +112,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     let outputHighlights: { start: number; end: number }[] = [];
     let inputHighlights: { start: number; end: number }[] = [];
 
-    const compileOutput = State.compileOutput;
-    const parseOutput = State.parseOutput;
     if (compileOutput && !compileOutput?.ok) {
       const errorOutput = generateGrammarCompileErrorOutput(
         State.grammarText,
@@ -176,8 +168,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
   for (const radio of outputModeRadios) {
     radio.addEventListener("change", () => {
-      updateState({ outputMode: outputModeFromDom() });
-      render();
+      const outputMode = outputModeFromDom();
+      updateState({ outputMode });
+      runWithCaret();
     });
   }
 
