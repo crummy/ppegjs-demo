@@ -66,6 +66,14 @@ function printError(error: Error) {
   );
 }
 
+/**
+ * Generates a tree diagram of the trace output, with a row for every node,
+ * while also adding rows for anonymous matches and appending error information
+ * @param input - string input to parser
+ * @param rules - array of rules, which will be indexed into upon failed rules
+ * @param trace - trace history
+ * @param error
+ */
 export function generateTraceOutput(
   input: string,
   rules: string[],
@@ -74,6 +82,8 @@ export function generateTraceOutput(
 ): { text: string; highlights: { start: number; end: number }[] } {
   let text = "";
   const highlights: { start: number; end: number }[] = [];
+  let previousEnd: number | null = null;
+  let previousDepth = 0;
 
   for (let offset = 0; offset < trace.length; offset += 4) {
     const ruleIdx = trace[offset];
@@ -81,11 +91,14 @@ export function generateTraceOutput(
     const start = trace[offset + 2];
     const end = trace[offset + 3];
 
+    if (previousEnd !== null && start > previousEnd) {
+      const gapPrefix = "│ ".repeat(previousDepth);
+      const gapInput = input.substring(previousEnd, start);
+      text += `${gapPrefix}"${gapInput}"\n`;
+    }
+
     const prefix = "│ ".repeat(depth);
-    const escapedInput = input
-      .substring(start, end)
-      .replace(/\r?\n/g, "\\n")
-      .replace(/\t/g, "\\t");
+    const escapedInput = escapeTraceInput(input.substring(start, end));
     const ruleName = ruleIdx < 0 ? rules[-ruleIdx - 1] : rules[ruleIdx];
     const line = `${prefix}${ruleName} "${escapedInput}"`;
 
@@ -99,6 +112,8 @@ export function generateTraceOutput(
     }
 
     text += "\n";
+    previousEnd = end;
+    previousDepth = depth;
   }
 
   if (error) {
@@ -106,6 +121,10 @@ export function generateTraceOutput(
   }
 
   return { text, highlights };
+}
+
+function escapeTraceInput(value: string): string {
+  return value.replace(/\r?\n/g, "\\n").replace(/\t/g, "\\t");
 }
 
 export function generateGrammarCompileErrorOutput(
