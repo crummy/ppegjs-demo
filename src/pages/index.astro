@@ -27,6 +27,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   };
 
   const examplesSelect = getElement<HTMLSelectElement>("#examples");
+  const scratchButton = getElement<HTMLButtonElement>("#scratch");
   const grammar = getElement<HTMLDivElement>("#grammar");
   const input = getElement<HTMLDivElement>("#input");
   const output = getElement<HTMLDivElement>("#output");
@@ -48,14 +49,38 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
   type DemoState = {
     selectedExample: string;
+    workspace: "example" | "scratch";
     grammarText: string;
     inputText: string;
     outputMode: OutputMode;
     error: boolean;
   };
 
+  const STORAGE_KEYS = {
+    scratchGrammar: "scratch-grammar",
+    scratchInput: "scratch-input",
+    workspace: "workspace",
+  } as const;
+
+  const readStorage = (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+
+  const writeStorage = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // ignore storage errors (private mode / blocked storage)
+    }
+  };
+
   const State: DemoState = {
     selectedExample: examplesSelect.value,
+    workspace: "example",
     grammarText: "",
     inputText: "",
     outputMode: outputModeFromDom(),
@@ -64,6 +89,21 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
   const updateState = (partial: Partial<DemoState>) => {
     Object.assign(State, partial);
+  };
+
+  const saveScratch = () => {
+    if (State.workspace !== "scratch") return;
+    writeStorage(STORAGE_KEYS.scratchGrammar, State.grammarText);
+    writeStorage(STORAGE_KEYS.scratchInput, State.inputText);
+  };
+
+  const loadScratch = () => {
+    updateState({
+      workspace: "scratch",
+      grammarText: readStorage(STORAGE_KEYS.scratchGrammar) ?? "",
+      inputText: readStorage(STORAGE_KEYS.scratchInput) ?? "",
+    });
+    runWithCaret();
   };
 
   // saves the current cursor location, compiles, then restores the location
@@ -100,6 +140,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (examplesSelect.value !== State.selectedExample) {
       examplesSelect.value = State.selectedExample;
     }
+    scratchButton.classList.toggle("active", State.workspace === "scratch");
     if (grammar.textContent !== State.grammarText) {
       grammar.textContent = State.grammarText;
     }
@@ -166,6 +207,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     const option = getElement<HTMLOptionElement>(`#option-${selected}`);
     updateState({
       selectedExample: selected,
+      workspace: "example",
       grammarText: option.dataset.grammar ?? "",
       inputText: option.dataset.input ?? "",
     });
@@ -175,6 +217,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   examplesSelect.addEventListener("change", () => {
     loadSelectedExample(examplesSelect.value);
   });
+  scratchButton.addEventListener("click", loadScratch);
 
   for (const radio of outputModeRadios) {
     radio.addEventListener("change", () => {
@@ -186,14 +229,26 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
   input.addEventListener("input", () => {
     updateState({ inputText: input.textContent ?? "" });
+    saveScratch();
     runWithCaret();
   });
   grammar.addEventListener("input", () => {
     updateState({ grammarText: grammar.textContent ?? "" });
+    saveScratch();
     runWithCaret();
   });
 
-  loadSelectedExample(State.selectedExample);
+  const workspaceFromStorage = readStorage(STORAGE_KEYS.workspace);
+  if (workspaceFromStorage === "scratch") {
+    loadScratch();
+  } else {
+    loadSelectedExample(State.selectedExample);
+  }
+
+  window.addEventListener("beforeunload", () => {
+    saveScratch();
+    writeStorage(STORAGE_KEYS.workspace, State.workspace);
+  });
 </script>
 
 <Layout>
@@ -278,6 +333,23 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       gap: 0.2rem;
     }
 
+    .examples {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    #scratch {
+      padding: 0.1rem 0.5rem;
+      border: thin solid gray;
+      background: white;
+      cursor: pointer;
+    }
+
+    #scratch.active {
+      background: #ddd;
+    }
+
     ::highlight(grammar-error),
     ::highlight(input-error),
     ::highlight(output-error) {
@@ -344,6 +416,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
             ))
           }
         </select>
+        <button id="scratch" type="button">Scratch</button>
       </span>
     </div>
     <div
