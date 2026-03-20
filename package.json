@@ -13,7 +13,7 @@
   "dependencies": {
     "@astrojs/check": "^0.9.4",
     "astro": "^5.17.1",
-    "ppegjs": "git://github.com/crummy/pPEGjs.git#782e1319498b97d59ebe90a4e4110adbfb891d1b",
+    "ppegjs": "git://github.com/crummy/pPEGjs.git#f52210f9fe03928c0f2acb51a377336635a0bc35",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
