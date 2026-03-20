@@ -97,13 +97,18 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     writeStorage(STORAGE_KEYS.scratchInput, State.inputText);
   };
 
-  const loadScratch = () => {
-    updateState({
-      workspace: "scratch",
-      grammarText: readStorage(STORAGE_KEYS.scratchGrammar) ?? "",
-      inputText: readStorage(STORAGE_KEYS.scratchInput) ?? "",
-    });
-    runWithCaret();
+  const toggleScratch = () => {
+    if (State.workspace === "example") {
+      updateState({
+        workspace: "scratch",
+        grammarText: readStorage(STORAGE_KEYS.scratchGrammar) ?? "",
+        inputText: readStorage(STORAGE_KEYS.scratchInput) ?? "",
+      });
+      runWithCaret();
+    } else {
+      updateState({ workspace: "example" });
+      loadSelectedExample(State.selectedExample)
+    }
   };
 
   // saves the current cursor location, compiles, then restores the location
@@ -115,7 +120,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     const selection = target ? getSelectionOffsets(target) : null;
 
     const { compileOutput, parseOutput } = compile();
-    updateState({ error: (compileOutput.ok === false || parseOutput?.ok === false) });
+    updateState({
+      error: compileOutput.ok === false || parseOutput?.ok === false,
+    });
     render(compileOutput, parseOutput);
 
     if (target && selection) {
@@ -140,7 +147,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (examplesSelect.value !== State.selectedExample) {
       examplesSelect.value = State.selectedExample;
     }
-    scratchButton.classList.toggle("active", State.workspace === "scratch");
+    scratchButton.innerText =
+      State.workspace === "example" ? "Scratch" : "Exit Scratch";
     if (grammar.textContent !== State.grammarText) {
       grammar.textContent = State.grammarText;
     }
@@ -217,7 +225,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   examplesSelect.addEventListener("change", () => {
     loadSelectedExample(examplesSelect.value);
   });
-  scratchButton.addEventListener("click", loadScratch);
+  scratchButton.addEventListener("click", toggleScratch);
 
   for (const radio of outputModeRadios) {
     radio.addEventListener("change", () => {
@@ -240,7 +248,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
   const workspaceFromStorage = readStorage(STORAGE_KEYS.workspace);
   if (workspaceFromStorage === "scratch") {
-    loadScratch();
+    toggleScratch();
   } else {
     loadSelectedExample(State.selectedExample);
   }
