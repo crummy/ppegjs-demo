@@ -15,7 +15,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     findError,
     generateTraceOutput,
     generateGrammarCompileErrorOutput,
-    highlightErrors,
+    type Range,
+    highlight
   } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
 
@@ -167,9 +168,11 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
 
     let outputText = "";
-    let grammarHighlights: { start: number; end: number }[] = [];
-    let outputHighlights: { start: number; end: number }[] = [];
-    let inputHighlights: { start: number; end: number }[] = [];
+    let grammarHighlights: Range[] = [];
+    let errorHighlights: Range[] = [];
+    let inputHighlights: Range[] = [];
+    let spanHighlights: Range[] = [];
+    let captureHighlights: Range[] = [];
 
     if (compileOutput && !compileOutput?.ok) {
       const errorOutput = generateGrammarCompileErrorOutput(
@@ -189,7 +192,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           parseOutput.error,
         );
         outputText = traceOutput.text;
-        outputHighlights = traceOutput.highlights;
+        errorHighlights = traceOutput.errors;
+        spanHighlights = traceOutput.spans;
+        captureHighlights = traceOutput.captures;
       } else {
         outputText = generateTreeOutput(parseOutput.ptree, parseOutput.error);
       }
@@ -206,9 +211,11 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
     output.textContent = outputText;
     CSS.highlights?.clear();
-    highlightErrors(grammar, grammarHighlights);
-    highlightErrors(output, outputHighlights);
-    highlightErrors(input, inputHighlights);
+    highlight(grammar, grammarHighlights, "highlight-errors");
+    highlight(output, errorHighlights, "highlight-errors");
+    highlight(input, inputHighlights, "highlight-errors");
+    highlight(output, spanHighlights, "highlight-spans");
+    highlight(output, captureHighlights, "highlight-captures");
   };
 
   const loadSelectedExample = (selected: string) => {
@@ -358,12 +365,17 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       background: #ddd;
     }
 
-    ::highlight(grammar-error),
-    ::highlight(input-error),
-    ::highlight(output-error) {
+    ::highlight(highlight-spans) {
+      color: #555;
+    }
+
+    ::highlight(highlight-captures) {
+      color: #999;
+    }
+
+    ::highlight(highlight-errors) {
       content: "!";
-      background-color: #ffb3ba !important;
-      border-bottom: 2px solid red;
+      text-decoration: red wavy underline;
     }
 
     .error-alert {

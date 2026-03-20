@@ -26,6 +26,11 @@ type Error = {
   type: string;
 };
 
+export type Range = {
+  start: number;
+  end: number;
+};
+
 export function generateTreeOutput(
   tree: Exp | string,
   error: Error | null,
@@ -66,6 +71,46 @@ function printError(error: Error) {
   );
 }
 
+const SPAN_SEPARATOR = "..";
+
+/**
+ * We display spans of each trace like this:
+ * 0..6
+ * 0..1
+ * 10..11
+ * The UI needs to know the maximum columns for these lines.
+ */
+function calculateMaxSpanWidth(trace: TraceHistory) {
+  let maxLength = 0;
+  for (let offset = 0; offset < trace.length; offset += 4) {
+    const start = trace[offset + 2];
+    const end = trace[offset + 3];
+    const spanText = `${start}${SPAN_SEPARATOR}${end}`;
+    if (spanText.length > maxLength) {
+      maxLength = spanText.length;
+    }
+  }
+  return maxLength;
+}
+
+const formatCentered = (
+  left: string | number,
+  right: string | number,
+  width: number,
+) => {
+  const l = String(left);
+  const r = String(right);
+
+  const sepStart = Math.floor((width - SPAN_SEPARATOR.length) / 2);
+
+  const leftWidth = sepStart;
+  const rightWidth = width - sepStart - SPAN_SEPARATOR.length;
+
+  return (
+    l.padStart(leftWidth, " ") + SPAN_SEPARATOR + r.padEnd(rightWidth, " ")
+  );
+};
+
 /**
  * Generates a tree diagram of the trace output, with a row for every node,
  * while also adding rows for anonymous matches and appending error information
@@ -79,11 +124,15 @@ export function generateTraceOutput(
   rules: string[],
   trace: TraceHistory,
   error: Error | null,
-): { text: string; highlights: { start: number; end: number }[] } {
+): { text: string; spans: Range[]; errors: Range[]; captures: Range[] } {
   let text = "";
-  const highlights: { start: number; end: number }[] = [];
+  const errors: Range[] = [];
+  const spans: Range[] = [];
+  const captures: Range[] = [];
   let previousEnd: number | null = null;
   let previousDepth = 0;
+
+  const spanWidth = calculateMaxSpanWidth(trace);
 
   for (let offset = 0; offset < trace.length; offset += 4) {
     const ruleIdx = trace[offset];
@@ -92,15 +141,31 @@ export function generateTraceOutput(
     const end = trace[offset + 3];
 
     if (previousEnd !== null && start > previousEnd) {
+      spans.push({ start: text.length, end: text.length + spanWidth });
+      text += formatCentered(start, end, spanWidth) + " ";
+
       const gapPrefix = "│ ".repeat(previousDepth);
       const gapInput = input.substring(previousEnd, start);
-      text += `${gapPrefix}"${gapInput}"\n`;
+      text += gapPrefix;
+      captures.push({
+        start: text.length,
+        end: text.length + gapInput.length,
+      });
+      text += `${gapInput}\n`;
     }
+
+    spans.push({ start: text.length, end: text.length + spanWidth });
+    text += formatCentered(start, end, spanWidth) + " ";
 
     const prefix = "│ ".repeat(depth);
     const escapedInput = escapeTraceInput(input.substring(start, end));
     const ruleName = ruleIdx < 0 ? rules[-ruleIdx - 1] : rules[ruleIdx];
-    const line = `${prefix}${ruleName} "${escapedInput}"`;
+    let line = `${prefix}${ruleName} `;
+    captures.push({
+      start: text.length + line.length,
+      end: text.length + line.length + escapedInput.length,
+    });
+    line += escapedInput;
 
     const lineStart = text.length;
     text += line;
@@ -108,7 +173,7 @@ export function generateTraceOutput(
     if (ruleIdx < 0 && line.length > 0) {
       const start = lineStart + prefix.length;
       const end = lineStart + prefix.length + ruleName.length - 1;
-      highlights.push({ start, end });
+      errors.push({ start, end });
     }
 
     text += "\n";
@@ -120,7 +185,7 @@ export function generateTraceOutput(
     text += "\n\n" + printError(error);
   }
 
-  return { text, highlights };
+  return { text, errors, spans, captures };
 }
 
 function escapeTraceInput(value: string): string {
@@ -132,7 +197,7 @@ export function generateGrammarCompileErrorOutput(
   compiled: GrammarCompileFailure,
 ): {
   text: string;
-  highlights: { start: number; end: number }[];
+  highlights: Range[];
 } {
   const error = compiled.error ?? {};
   const message = error.message ?? "Unknown grammar compile error.";
@@ -140,7 +205,7 @@ export function generateGrammarCompileErrorOutput(
     "Grammar compile error",
     `${error.type}: ${message}`,
   ];
-  const highlights: { start: number; end: number }[] = [];
+  const highlights: Range[] = [];
 
   if (error.fault_rule) lines.push(`Fault rule: ${error.fault_rule}`);
   if (typeof error.rule === "string" && error.rule.length > 0) {
@@ -211,7 +276,7 @@ export function findError(
 function findTrailingInput(
   trace: TraceHistory,
   inputLength: number,
-): { start: number; end: number } | null {
+): Range | null {
   let topLevelEnd = -1;
   for (let i = 0; i < trace.length; i += 4) {
     const ruleId = trace[i];
@@ -322,21 +387,23 @@ function isTokenChar(ch: string): boolean {
   return /[A-Za-z0-9_$]/.test(ch);
 }
 
-export function highlightErrors(
+export function highlight(
   element: HTMLElement,
-  errors: { start: number; end: number }[],
+  ranges: Range[],
+  highlightName: string,
 ) {
   const textNode = element.firstChild;
   if (!CSS.highlights || textNode?.nodeType !== Node.TEXT_NODE) {
     return;
+  } else if (!element.id) {
+    console.warn("No id element on " + element + "; will skip highlighting");
   }
 
   const text = element.textContent ?? "";
-  const highlightName = `${element.id || "input"}-error`;
 
   const highlight = new Highlight();
 
-  for (const error of errors) {
+  for (const error of ranges) {
     const range = {
       start: Math.max(0, error.start),
       end: Math.max(0, error.end),
