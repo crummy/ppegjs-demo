@@ -16,9 +16,10 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     generateTraceOutput,
     generateGrammarCompileErrorOutput,
     type Range,
-    highlight
+    highlight,
   } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
+  import type { TraceOptions } from "../lib/generate-output.ts";
 
   // A little helper to save us from doing null checks later
   const getElement = <T extends Element>(selector: string): T => {
@@ -32,6 +33,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const grammar = getElement<HTMLDivElement>("#grammar");
   const input = getElement<HTMLDivElement>("#input");
   const output = getElement<HTMLDivElement>("#output");
+  const showAnonymous = getElement<HTMLInputElement>("#show-anonymous");
+  const showEmpty = getElement<HTMLInputElement>("#show-empty");
   const outputModeRadios = document.querySelectorAll<HTMLInputElement>(
     'input[name="output-mode"]',
   );
@@ -55,12 +58,16 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     inputText: string;
     outputMode: OutputMode;
     error: boolean;
+    options: TraceOptions;
   };
 
   const STORAGE_KEYS = {
     scratchGrammar: "scratch-grammar",
     scratchInput: "scratch-input",
     workspace: "workspace",
+    showAnonymous: "show-anonymous",
+    showEmpty: "show-empty",
+    selectedExample: "selected-example",
   } as const;
 
   const readStorage = (key: string): string | null => {
@@ -86,6 +93,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     inputText: "",
     outputMode: outputModeFromDom(),
     error: false,
+    options: { showAnonymous: false, showEmpty: false },
   };
 
   const updateState = (partial: Partial<DemoState>) => {
@@ -108,7 +116,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       runWithCaret();
     } else {
       updateState({ workspace: "example" });
-      loadSelectedExample(State.selectedExample)
+      loadSelectedExample(State.selectedExample);
     }
   };
 
@@ -156,6 +164,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (input.textContent !== State.inputText) {
       input.textContent = State.inputText;
     }
+    State.outputMode === "trace"
+      ? document.querySelector(".trace-options")?.classList.remove("hidden")
+      : document.querySelector(".trace-options")?.classList.add("hidden");
 
     document
       .querySelectorAll(".error-alert")
@@ -190,6 +201,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           parseOutput.rules,
           parseOutput.trace_history,
           parseOutput.error,
+          State.options,
         );
         outputText = traceOutput.text;
         errorHighlights = traceOutput.errors;
@@ -253,6 +265,29 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     runWithCaret();
   });
 
+  showAnonymous.addEventListener("change", (e) => {
+    const target = e.target as HTMLInputElement;
+    updateState({
+      options: { ...State.options, showAnonymous: target.checked },
+    });
+    runWithCaret();
+  });
+  showEmpty.addEventListener("change", (e) => {
+    const target = e.target as HTMLInputElement;
+    updateState({ options: { ...State.options, showEmpty: target.checked } });
+    runWithCaret();
+  });
+
+  const defaultSelectedExample = examplesSelect.querySelectorAll("option").values().find((e) => e.dataset["defaultSelected"] === "true")?.value
+  updateState({
+    options: {
+      showAnonymous: readStorage(STORAGE_KEYS.showAnonymous) === "true",
+      showEmpty: readStorage(STORAGE_KEYS.showEmpty) === "true",
+    },
+    selectedExample: readStorage(STORAGE_KEYS.selectedExample) ?? defaultSelectedExample,
+  });
+
+
   const workspaceFromStorage = readStorage(STORAGE_KEYS.workspace);
   if (workspaceFromStorage === "scratch") {
     toggleScratch();
@@ -263,6 +298,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   window.addEventListener("beforeunload", () => {
     saveScratch();
     writeStorage(STORAGE_KEYS.workspace, State.workspace);
+    writeStorage(
+      STORAGE_KEYS.showAnonymous,
+      State.options.showAnonymous.toString(),
+    );
+    writeStorage(STORAGE_KEYS.showEmpty, State.options.showEmpty.toString());
+    writeStorage(STORAGE_KEYS.selectedExample, State.selectedExample)
   });
 </script>
 
@@ -328,12 +369,20 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
 
     .header {
-      height: 20px;
       padding: 5px;
       border-bottom: thin solid gray;
       background: whitesmoke;
       display: flex;
       justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .trace-options {
+      display: flex;
+      justify-content: end;
+      gap: 0.5rem;
+      padding-top: 0.5rem;
+      flex-grow: 1;
     }
 
     .output-mode {
@@ -429,7 +478,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
                 value={title}
                 data-grammar={grammar}
                 data-input={input}
-                selected={title == initialExample}
+                data-default-selected={title == initialExample}
               >
                 {title}
               </option>
@@ -473,6 +522,16 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           JSON
         </label>
       </span>
+      <div class="trace-options">
+        <label>
+          <input type="checkbox" id="show-anonymous" />
+          Show Anonymous
+        </label>
+        <label>
+          <input type="checkbox" id="show-empty" />
+          Show Empty
+        </label>
+      </div>
     </div>
     <div class="content-container">
       <div id="output"></div>

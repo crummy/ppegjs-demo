@@ -31,6 +31,8 @@ export type Range = {
   end: number;
 };
 
+export type TraceOptions = { showAnonymous: boolean; showEmpty: boolean };
+
 export function generateTreeOutput(
   tree: Exp | string,
   error: Error | null,
@@ -117,6 +119,7 @@ const formatCentered = (
  * @param input - string input to parser
  * @param rules - array of rules, which will be indexed into upon failed rules
  * @param trace - trace history
+ * @param { showEmpty, showAnonymous} - limit possibly unwanted output
  * @param error
  */
 export function generateTraceOutput(
@@ -124,6 +127,7 @@ export function generateTraceOutput(
   rules: string[],
   trace: TraceHistory,
   error: Error | null,
+  { showAnonymous, showEmpty }: TraceOptions,
 ): { text: string; spans: Range[]; errors: Range[]; captures: Range[] } {
   let text = "";
   const errors: Range[] = [];
@@ -139,6 +143,13 @@ export function generateTraceOutput(
     const depth = trace[offset + 1];
     const start = trace[offset + 2];
     const end = trace[offset + 3];
+    if (start === end && !showEmpty) {
+      continue;
+    }
+    const ruleName = ruleIdx < 0 ? rules[-ruleIdx - 1] : rules[ruleIdx];
+    if (ruleIdx >= 0 && ruleName[0] === '_' && !showAnonymous) {
+      continue;
+    }
 
     if (previousEnd !== null && start > previousEnd) {
       spans.push({ start: text.length, end: text.length + spanWidth });
@@ -159,7 +170,6 @@ export function generateTraceOutput(
 
     const prefix = "│ ".repeat(depth);
     const escapedInput = escapeTraceInput(input.substring(start, end));
-    const ruleName = ruleIdx < 0 ? rules[-ruleIdx - 1] : rules[ruleIdx];
     let line = `${prefix}${ruleName} `;
     captures.push({
       start: text.length + line.length,
@@ -170,7 +180,7 @@ export function generateTraceOutput(
     const lineStart = text.length;
     text += line;
 
-    if (ruleIdx < 0 && line.length > 0) {
+    if (ruleIdx < 0) {
       const start = lineStart + prefix.length;
       const end = lineStart + prefix.length + ruleName.length - 1;
       errors.push({ start, end });
