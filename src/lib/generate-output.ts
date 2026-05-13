@@ -137,9 +137,10 @@ export function generateTraceOutput(
     spanEnd: number,
     literal: string,
     rule?: string,
-    success: boolean = true,
+    failed: boolean = false,
+    dropped: boolean = false,
   ) {
-    if (!success && spanStart === spanEnd) {
+    if (failed && spanStart === spanEnd) {
       return "";
     }
 
@@ -163,7 +164,7 @@ export function generateTraceOutput(
       end: start + spanWidth,
     });
 
-    if (!success && rule) {
+    if (failed && rule) {
       errors.push({
         start: start + span.length + verticalLines.length,
         end: start + span.length + verticalLines.length + rule.length - 1,
@@ -173,18 +174,18 @@ export function generateTraceOutput(
     return `${span}${verticalLines}${ruleSubstitute}${escapedLiteral}\n`;
   }
 
-  function buildOutput({ rule, success, start, end, children }: TraceElement) {
+  function buildOutput({ rule, failed, dropped, start, end, children }: TraceElement) {
     // Skip successful anonymous rules
-    if (success && rule[0] === "_") {
+    if (!failed && rule[0] === "_") {
       return "";
     }
 
     // Output the rule line itself.
     const literal = input.substring(start, end);
-    text += outputLine(text.length, depth, start, end, literal, rule, success);
+    text += outputLine(text.length, depth, start, end, literal, rule, failed, dropped);
 
     const visibleChildren = children.filter(
-      (child: TraceElement) => !(child.success && child.rule[0] === "_"),
+      (child: TraceElement) => child.failed || child.rule[0] !== "_"
     );
 
     if (visibleChildren.length > 0) {
