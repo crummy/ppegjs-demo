@@ -24,6 +24,7 @@ type Error = {
   line: number;
   message: string;
   type: string;
+  found?: string;
 };
 
 export type Range = {
@@ -37,7 +38,8 @@ export function generateTreeOutput(
   tree: Exp | string,
   error: Error | null,
   indent = 0,
-): string {
+): { text: string; errors: Range[] } {
+  const errors: Range[] = [];
   const prefix = "│ ".repeat(indent);
   const [label, value] = tree;
 
@@ -51,15 +53,25 @@ export function generateTreeOutput(
 
   if (Array.isArray(value)) {
     for (const child of value) {
-      result += "\n" + generateTreeOutput(child, null, indent + 1);
+      let recursion = generateTreeOutput(child, null, indent + 1);
+      errors.push(...recursion.errors)
+      result += "\n" + recursion.text;
     }
   }
 
   if (error) {
+    if (error.found) {
+      result += "\n│ " + prefix;
+      errors.push({
+        start: result.length,
+        end: result.length + error.found.length,
+      });
+      result += error.found + "\n";
+    }
     result += "\n\n" + printError(error);
   }
 
-  return result;
+  return { errors, text: result };
 }
 
 function printError(error: Error) {
@@ -84,7 +96,7 @@ const SPAN_SEPARATOR = "..";
  * 10..11
  * The UI needs to know the maximum columns for these lines.
  */
-function calculateMaxSpanWidth({ start, end, children }: TraceElement) {
+function calculateMaxSpanWidth({ start, end, children }: TraceElement): number {
   const length = `${start}${SPAN_SEPARATOR}${end}`.length;
   return Math.max(0, length, ...children.map(calculateMaxSpanWidth));
 }
@@ -111,7 +123,6 @@ const formatCentered = (
  * Generates a tree diagram of the trace output, with a row for every node,
  * while also adding rows for anonymous matches and appending error information
  * @param input - string input to parser
- * @param rules - array of rules, which will be indexed into upon failed rules
  * @param trace - trace history
  * @param error
  */
@@ -174,7 +185,14 @@ export function generateTraceOutput(
     return `${span}${verticalLines}${ruleSubstitute}${escapedLiteral}\n`;
   }
 
-  function buildOutput({ rule, failed, dropped, start, end, children }: TraceElement) {
+  function buildOutput({
+    rule,
+    failed,
+    dropped,
+    start,
+    end,
+    children,
+  }: TraceElement) {
     // Skip successful anonymous rules
     if (!failed && rule[0] === "_") {
       return "";
@@ -182,10 +200,19 @@ export function generateTraceOutput(
 
     // Output the rule line itself.
     const literal = input.substring(start, end);
-    text += outputLine(text.length, depth, start, end, literal, rule, failed, dropped);
+    text += outputLine(
+      text.length,
+      depth,
+      start,
+      end,
+      literal,
+      rule,
+      failed,
+      dropped,
+    );
 
     const visibleChildren = children.filter(
-      (child: TraceElement) => child.failed || child.rule[0] !== "_"
+      (child: TraceElement) => child.failed || child.rule[0] !== "_",
     );
 
     if (visibleChildren.length > 0) {
@@ -224,7 +251,13 @@ export function generateTraceOutput(
   }
 
   if (trace.start > 0) {
-    text += outputLine(text.length, depth, 0, trace.start, input.slice(0, trace.start));
+    text += outputLine(
+      text.length,
+      depth,
+      0,
+      trace.start,
+      input.slice(0, trace.start),
+    );
   }
 
   buildOutput(trace);
@@ -232,7 +265,13 @@ export function generateTraceOutput(
   // trailing literal
   if (trace.end < input.length) {
     const literal = input.substring(trace.end);
-    text += outputLine(text.length, depth + 1, trace.end, input.length, literal);
+    text += outputLine(
+      text.length,
+      depth + 1,
+      trace.end,
+      input.length,
+      literal,
+    );
   }
 
   if (error) {

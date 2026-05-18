@@ -204,11 +204,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         );
         outputText = traceOutput.text;
         errorHighlights = traceOutput.errors;
-        console.log(errorHighlights);
         spanHighlights = traceOutput.spans;
         captureHighlights = traceOutput.captures;
       } else {
-        outputText = generateTreeOutput(parseOutput.ptree, parseOutput.error);
+        const treeOutput = generateTreeOutput(parseOutput.ptree, parseOutput.error);
+        outputText = treeOutput.text;
+        errorHighlights = treeOutput.errors;
       }
 
       if (!parseOutput.ok) {
