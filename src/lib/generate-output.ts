@@ -48,7 +48,7 @@ export function generateTreeOutput(
 
   // Leaf node
   if (typeof value === "string") {
-    result += ` "${value}"`;
+    result += ` ${JSON.stringify(value)}`;
   }
 
   if (Array.isArray(value)) {
