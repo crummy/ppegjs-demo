@@ -54,7 +54,7 @@ export function generateTreeOutput(
   if (Array.isArray(value)) {
     for (const child of value) {
       let recursion = generateTreeOutput(child, null, indent + 1);
-      errors.push(...recursion.errors)
+      errors.push(...recursion.errors);
       result += "\n" + recursion.text;
     }
   }

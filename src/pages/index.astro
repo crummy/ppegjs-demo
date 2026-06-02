@@ -195,7 +195,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       if (State.outputMode === "json") {
         outputText = JSON.stringify(parseOutput.ptree, null, 2);
       } else if (State.outputMode === "trace") {
-        const trace = ppeg.show_trace(parseOutput)
+        const trace = ppeg.show_trace(parseOutput);
         const traceOutput = generateTraceOutput(
           State.inputText,
           trace,
@@ -207,7 +207,10 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         spanHighlights = traceOutput.spans;
         captureHighlights = traceOutput.captures;
       } else {
-        const treeOutput = generateTreeOutput(parseOutput.ptree, parseOutput.error);
+        const treeOutput = generateTreeOutput(
+          parseOutput.ptree,
+          parseOutput.error,
+        );
         outputText = treeOutput.text;
         errorHighlights = treeOutput.errors;
       }
@@ -484,6 +487,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       class="content-container"
       id="grammar"
       contenteditable="plaintext-only"
+      spellcheck="false"
     >
     </div>
   </div>
@@ -491,7 +495,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     <div class="header">
       <label for="input">Input</label>
     </div>
-    <div class="content-container" id="input" contenteditable="plaintext-only">
+    <div
+      class="content-container"
+      id="input"
+      contenteditable="plaintext-only"
+      spellcheck="false"
+    >
     </div>
   </div>
   <div class="output">
