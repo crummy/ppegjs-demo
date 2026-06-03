@@ -25,6 +25,7 @@ type Error = {
   message: string;
   type: string;
   found?: string;
+  fault_rule?: string;
 };
 
 export type Range = {
@@ -149,7 +150,6 @@ export function generateTraceOutput(
     literal: string,
     rule?: string,
     failed: boolean = false,
-    dropped: boolean = false,
   ) {
     if (failed && spanStart === spanEnd) {
       return "";
@@ -188,7 +188,6 @@ export function generateTraceOutput(
   function buildOutput({
     rule,
     failed,
-    dropped,
     start,
     end,
     children,
@@ -208,7 +207,7 @@ export function generateTraceOutput(
       literal,
       rule,
       failed,
-      dropped,
+
     );
 
     const visibleChildren = children.filter(

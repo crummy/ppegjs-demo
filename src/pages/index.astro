@@ -200,12 +200,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           State.inputText,
           trace,
           parseOutput.error,
-          State.options,
         );
         outputText = traceOutput.text;
         errorHighlights = traceOutput.errors;
         spanHighlights = traceOutput.spans;
         captureHighlights = traceOutput.captures;
+        grammarHighlights = failedRuleHighlights(State.grammarText, parseOutput.error)
       } else {
         const treeOutput = generateTreeOutput(
           parseOutput.ptree,
@@ -213,6 +213,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
         );
         outputText = treeOutput.text;
         errorHighlights = treeOutput.errors;
+        grammarHighlights = failedRuleHighlights(State.grammarText, parseOutput.error)
       }
 
       if (!parseOutput.ok) {
@@ -233,6 +234,16 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     highlight(output, spanHighlights, "highlight-spans");
     highlight(output, captureHighlights, "highlight-captures");
   };
+
+  function failedRuleHighlights(grammar: string, { fault_rule } : { fault_rule?: string} = {}) {
+    if (fault_rule) {
+      const re = new RegExp(`^\\s*${fault_rule}`, "m");
+      const start = grammar.search(re);
+      const end = start + fault_rule.length
+      return [{start, end}]
+    }
+    return []
+  }
 
   const loadSelectedExample = (selected: string) => {
     const option = getElement<HTMLOptionElement>(`#option-${selected}`);
