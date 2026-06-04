@@ -1,3 +1,4 @@
+import { parseTraceHistory } from "ppegjs/pPEG.mjs";
 import type { Exp, TraceHistory, TraceElement } from "ppegjs/pPEG.mjs";
 
 type GrammarCompileError = {
@@ -185,13 +186,7 @@ export function generateTraceOutput(
     return `${span}${verticalLines}${ruleSubstitute}${escapedLiteral}\n`;
   }
 
-  function buildOutput({
-    rule,
-    failed,
-    start,
-    end,
-    children,
-  }: TraceElement) {
+  function buildOutput({ rule, failed, start, end, children }: TraceElement) {
     // Skip successful anonymous rules
     if (!failed && rule[0] === "_") {
       return "";
@@ -199,16 +194,7 @@ export function generateTraceOutput(
 
     // Output the rule line itself.
     const literal = input.substring(start, end);
-    text += outputLine(
-      text.length,
-      depth,
-      start,
-      end,
-      literal,
-      rule,
-      failed,
-
-    );
+    text += outputLine(text.length, depth, start, end, literal, rule, failed);
 
     const visibleChildren = children.filter(
       (child: TraceElement) => child.failed || child.rule[0] !== "_",
@@ -348,7 +334,7 @@ export function findError(
   } | null = null;
 
   for (const e of splitTraces(trace)) {
-    if (e.ok) continue;
+    if (!e.failed) continue;
     if (!best) {
       best = e;
       continue;
@@ -375,10 +361,13 @@ function findTrailingInput(
 ): Range | null {
   let topLevelEnd = -1;
   for (let i = 0; i < trace.length; i += 4) {
-    const ruleId = trace[i];
-    const depth = trace[i + 1];
-    const end = trace[i + 3];
-    if (ruleId >= 0 && depth === 0 && end > topLevelEnd) {
+    const { depth, dropped, end, failed } = parseTraceHistory(
+      trace[i],
+      trace[i + 1],
+      trace[i + 2],
+      trace[i + 3],
+    );
+    if (!failed && !dropped && depth === 0 && end > topLevelEnd) {
       topLevelEnd = end;
     }
   }
@@ -389,20 +378,21 @@ function findTrailingInput(
 
 function splitTraces(
   trace: TraceHistory,
-): { ok: boolean; depth: number; start: number; end: number }[] {
+): { failed: boolean; depth: number; start: number; end: number }[] {
   const result: {
-    ok: boolean;
+    failed: boolean;
     depth: number;
     start: number;
     end: number;
   }[] = [];
   for (let i = 0; i < trace.length; i += 4) {
-    result.push({
-      ok: trace[i] >= 0,
-      depth: trace[i + 1],
-      start: trace[i + 2],
-      end: trace[i + 3],
-    });
+    const { depth, end, failed, start } = parseTraceHistory(
+      trace[i],
+      trace[i + 1],
+      trace[i + 2],
+      trace[i + 3],
+    );
+    result.push({ failed, depth, start, end });
   }
   return result;
 }
