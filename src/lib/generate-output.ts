@@ -156,7 +156,9 @@ export function generateTraceOutput(
       return "";
     }
 
-    const span = formatCentered(spanStart, spanEnd, spanWidth) + " ";
+    let span = formatCentered(spanStart, spanEnd, spanWidth) + " ";
+    // why? otherwise we get column offset for e.g. extra input to date.
+    span = span.slice(0, spanWidth + 1)
     const verticalLines = "│ ".repeat(depth);
     const escapedLiteral = escapeTraceInput(literal);
     const ruleSubstitute = rule ? `${rule} ` : "";
