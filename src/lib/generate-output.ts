@@ -1,33 +1,4 @@
-import { parseTraceHistory } from "ppegjs/pPEG.mjs";
-import type { Exp, TraceHistory, TraceElement } from "ppegjs/pPEG.mjs";
-
-type GrammarCompileError = {
-  type?: string;
-  message?: string;
-  line?: number;
-  column?: number;
-  fault_rule?: string;
-  expected?: unknown;
-  found?: unknown;
-  location?: string;
-  rule?: string;
-};
-
-type GrammarCompileFailure = {
-  ok: false;
-  error?: GrammarCompileError;
-  rules?: string[];
-  trace_history?: TraceHistory;
-};
-
-type Error = {
-  column: number;
-  line: number;
-  message: string;
-  type: string;
-  found?: string;
-  fault_rule?: string;
-};
+import type { Code, Node, Parse, PtreeNode } from "ppegjs/pPEG.js";
 
 export type Range = {
   start: number;
@@ -36,14 +7,26 @@ export type Range = {
 
 export type TraceOptions = { showAnonymous: boolean; showEmpty: boolean };
 
-export function generateTreeOutput(
-  tree: Exp | string,
-  error: Error | null,
+export function generateTreeOutput(parse: Parse): {
+  text: string;
+  errors: Range[];
+} {
+  return generateTreeNodeOutput(parse.ptree(), parse.ok ? null : String(parse));
+}
+
+function generateTreeNodeOutput(
+  ptree: PtreeNode | [],
+  parseErrorText: string | null = null,
   indent = 0,
 ): { text: string; errors: Range[] } {
   const errors: Range[] = [];
+
+  if (ptree.length === 0) {
+    return { errors, text: parseErrorText ?? "" };
+  }
+
   const prefix = "│ ".repeat(indent);
-  const [label, value] = tree;
+  const [label, value] = ptree;
 
   // Internal node
   let result = `${prefix}${label}`;
@@ -55,41 +38,42 @@ export function generateTreeOutput(
 
   if (Array.isArray(value)) {
     for (const child of value) {
-      let recursion = generateTreeOutput(child, null, indent + 1);
+      const recursion = generateTreeNodeOutput(child, null, indent + 1);
       errors.push(...recursion.errors);
       result += "\n" + recursion.text;
     }
   }
 
-  if (error) {
-    if (error.found) {
-      result += "\n│ " + prefix;
-      errors.push({
-        start: result.length,
-        end: result.length + error.found.length,
-      });
-      result += error.found + "\n";
-    }
-    result += "\n\n" + printError(error);
+  if (parseErrorText && indent === 0) {
+    result += "\n\n" + parseErrorText;
   }
 
   return { errors, text: result };
 }
 
-function printError(error: Error) {
-  return (
-    "Error '" +
-    error.type +
-    "' at line " +
-    error.line +
-    ", column " +
-    error.column +
-    ":\n" +
-    error.message
-  );
+const SPAN_SEPARATOR = "..";
+const TRACE_FAIL = 0x2000;
+const TRACE_DROP = 0x1000;
+const LEGACY_TRACE_FAIL = 1;
+const LEGACY_TRACE_DROP = 2;
+const LEGACY_TRACE_RULE_SHIFT = 2;
+
+function readLegacyTraceNode(trace: number[], index: number) {
+  const id = trace[index];
+  return {
+    depth: trace[index + 1],
+    dropped: (id & LEGACY_TRACE_DROP) !== 0,
+    end: trace[index + 3],
+    failed: (id & LEGACY_TRACE_FAIL) !== 0,
+    rule: String(id >> LEGACY_TRACE_RULE_SHIFT),
+    ruleId: id >> LEGACY_TRACE_RULE_SHIFT,
+    start: trace[index + 2],
+  };
 }
 
-const SPAN_SEPARATOR = "..";
+function isNodeTrace(trace: Node[] | number[]): trace is Node[] {
+  return trace.length === 0 || typeof trace[0] === "object";
+}
 
 /**
  * We display spans of each trace like this:
@@ -98,9 +82,11 @@ const SPAN_SEPARATOR = "..";
  * 10..11
  * The UI needs to know the maximum columns for these lines.
  */
-function calculateMaxSpanWidth({ start, end, children }: TraceElement): number {
-  const length = `${start}${SPAN_SEPARATOR}${end}`.length;
-  return Math.max(0, length, ...children.map(calculateMaxSpanWidth));
+function calculateMaxSpanWidth(trace: Node[]): number {
+  return Math.max(
+    0,
+    ...trace.map(({ start, end }) => `${start}${SPAN_SEPARATOR}${end}`.length),
+  );
 }
 
 const formatCentered = (
@@ -124,15 +110,16 @@ const formatCentered = (
 /**
  * Generates a tree diagram of the trace output, with a row for every node,
  * while also adding rows for anonymous matches and appending error information
- * @param input - string input to parser
- * @param trace - trace history
- * @param error
+ * @param parse - parser output
  */
-export function generateTraceOutput(
-  input: string,
-  trace: TraceElement,
-  error: Error | null,
-): { text: string; spans: Range[]; errors: Range[]; captures: Range[] } {
+export function generateTraceOutput(parse: Parse): {
+  text: string;
+  spans: Range[];
+  errors: Range[];
+  captures: Range[];
+} {
+  const { code, input, trace } = parse;
+  const error = parse.ok ? null : String(parse);
   let text = "";
   // These ranges store indexes of start..end into the returned text for highlighting
   const errors: Range[] = [];
@@ -158,7 +145,7 @@ export function generateTraceOutput(
 
     let span = formatCentered(spanStart, spanEnd, spanWidth) + " ";
     // why? otherwise we get column offset for e.g. extra input to date.
-    span = span.slice(0, spanWidth + 1)
+    span = span.slice(0, spanWidth + 1);
     const verticalLines = "│ ".repeat(depth);
     const escapedLiteral = escapeTraceInput(literal);
     const ruleSubstitute = rule ? `${rule} ` : "";
@@ -188,47 +175,78 @@ export function generateTraceOutput(
     return `${span}${verticalLines}${ruleSubstitute}${escapedLiteral}\n`;
   }
 
-  function buildOutput({ rule, failed, start, end, children }: TraceElement) {
+  function buildOutput(trace: Node[]) {
+    const [node] = trace;
+    if (!node) return;
+
+    const failed = (node.id & TRACE_FAIL) !== 0;
+    const rule = code.id_name(node.idx());
     // Skip successful anonymous rules
     if (!failed && rule[0] === "_") {
       return "";
     }
 
     // Output the rule line itself.
-    const literal = input.substring(start, end);
-    text += outputLine(text.length, depth, start, end, literal, rule, failed);
-
-    const visibleChildren = children.filter(
-      (child: TraceElement) => child.failed || child.rule[0] !== "_",
+    const literal = input.substring(node.start, node.end);
+    text += outputLine(
+      text.length,
+      depth,
+      node.start,
+      node.end,
+      literal,
+      rule,
+      failed,
     );
 
+    const visibleChildren: Node[][] = [];
+    const childDepth = node.depth + 1;
+    let cursor = 1;
+    while (cursor < trace.length) {
+      const child = trace[cursor];
+      if (child.depth <= node.depth) break;
+      const childStart = cursor;
+      cursor++;
+      while (cursor < trace.length && trace[cursor].depth > child.depth) {
+        cursor++;
+      }
+
+      if (
+        child.depth === childDepth &&
+        ((child.id & TRACE_FAIL) !== 0 || code.id_name(child.idx())[0] !== "_")
+      ) {
+        visibleChildren.push(trace.slice(childStart, cursor));
+      }
+    }
+
     if (visibleChildren.length > 0) {
-      let childStart = start;
+      let childStart = node.start;
       depth++;
 
       for (const child of visibleChildren) {
-        if (child.start > childStart) {
-          const childGap = input.slice(childStart, child.start);
+        const [childNode] = child;
+        const childTraceStart = childNode.start;
+        if (childTraceStart > childStart) {
+          const childGap = input.slice(childStart, childTraceStart);
           text += outputLine(
             text.length,
             depth,
             childStart,
-            child.start,
+            childTraceStart,
             childGap,
           );
         }
 
         buildOutput(child);
-        childStart = child.end;
+        childStart = childNode.end;
       }
 
-      if (childStart < end) {
-        const trailingChildGap = input.slice(childStart, end);
+      if (childStart < node.end) {
+        const trailingChildGap = input.slice(childStart, node.end);
         text += outputLine(
           text.length,
           depth,
           childStart,
-          end,
+          node.end,
           trailingChildGap,
         );
       }
@@ -237,25 +255,27 @@ export function generateTraceOutput(
     }
   }
 
-  if (trace.start > 0) {
+  const [rootNode] = trace;
+
+  if (rootNode && rootNode.start > 0) {
     text += outputLine(
       text.length,
       depth,
       0,
-      trace.start,
-      input.slice(0, trace.start),
+      rootNode.start,
+      input.slice(0, rootNode.start),
     );
   }
 
   buildOutput(trace);
 
   // trailing literal
-  if (trace.end < input.length) {
-    const literal = input.substring(trace.end);
+  if (rootNode && rootNode.end < input.length) {
+    const literal = input.substring(rootNode.end);
     text += outputLine(
       text.length,
       depth + 1,
-      trace.end,
+      rootNode.end,
       input.length,
       literal,
     );
@@ -266,7 +286,7 @@ export function generateTraceOutput(
     if (lastLiteralRange) {
       errors.push(lastLiteralRange);
     }
-    text += "\n\n" + printError(error);
+    text += "\n\n" + error;
   }
 
   return { text, errors, spans, captures };
@@ -278,37 +298,34 @@ function escapeTraceInput(value: string): string {
 
 export function generateGrammarCompileErrorOutput(
   grammarText: string,
-  compiled: GrammarCompileFailure,
+  compiled: Code,
 ): {
   text: string;
   highlights: Range[];
 } {
-  const error = compiled.error ?? {};
-  const message = error.message ?? "Unknown grammar compile error.";
-  const lines: string[] = [
-    "Grammar compile error",
-    `${error.type}: ${message}`,
-  ];
+  const error = compiled.errors() ?? {};
+  // const message = error.message ?? "Unknown grammar compile error.";
+  const lines: string[] = ["Grammar compile error", `${error}: N/a`];
   const highlights: Range[] = [];
-
-  if (error.fault_rule) lines.push(`Fault rule: ${error.fault_rule}`);
-  if (typeof error.rule === "string" && error.rule.length > 0) {
-    lines.push(`In rule: ${error.rule}`);
-    const ruleRange = findRuleDefinitionRange(grammarText, error.rule);
-    if (ruleRange) {
-      highlights.push(ruleRange);
-    }
-  }
-
-  if (error.column && error.line) {
-    lines.push(`Location: Line ${error.line}, col ${error.column}`);
-    const offset = extractOffsetFromLineColumn(
-      grammarText,
-      error.line,
-      error.column,
-    );
-    highlights.push({ start: offset, end: offset });
-  }
+  //
+  // if (error.fault_rule) lines.push(`Fault rule: ${error.fault_rule}`);
+  // if (typeof error.rule === "string" && error.rule.length > 0) {
+  //   lines.push(`In rule: ${error.rule}`);
+  //   const ruleRange = findRuleDefinitionRange(grammarText, error.rule);
+  //   if (ruleRange) {
+  //     highlights.push(ruleRange);
+  //   }
+  // }
+  //
+  // if (error.column && error.line) {
+  //   lines.push(`Location: Line ${error.line}, col ${error.column}`);
+  //   const offset = extractOffsetFromLineColumn(
+  //     grammarText,
+  //     error.line,
+  //     error.column,
+  //   );
+  //   highlights.push({ start: offset, end: offset });
+  // }
 
   const text = lines.join("\n");
 
@@ -320,7 +337,7 @@ export function generateGrammarCompileErrorOutput(
  * Returns { start, end } or null if none.
  */
 export function findError(
-  trace: TraceHistory,
+  trace: Node[] | number[],
   inputLength: number,
   inputText: string,
 ): { end: number; start: number } | null {
@@ -358,19 +375,27 @@ export function findError(
 }
 
 function findTrailingInput(
-  trace: TraceHistory,
+  trace: Node[] | number[],
   inputLength: number,
 ): Range | null {
   let topLevelEnd = -1;
-  for (let i = 0; i < trace.length; i += 4) {
-    const { depth, dropped, end, failed } = parseTraceHistory(
-      trace[i],
-      trace[i + 1],
-      trace[i + 2],
-      trace[i + 3],
-    );
-    if (!failed && !dropped && depth === 0 && end > topLevelEnd) {
-      topLevelEnd = end;
+  if (isNodeTrace(trace)) {
+    for (const node of trace) {
+      if (
+        (node.id & TRACE_FAIL) === 0 &&
+        (node.id & TRACE_DROP) === 0 &&
+        node.depth === 0 &&
+        node.end > topLevelEnd
+      ) {
+        topLevelEnd = node.end;
+      }
+    }
+  } else {
+    for (let i = 0; i < trace.length; i += 4) {
+      const { depth, dropped, end, failed } = readLegacyTraceNode(trace, i);
+      if (!failed && !dropped && depth === 0 && end > topLevelEnd) {
+        topLevelEnd = end;
+      }
     }
   }
 
@@ -379,7 +404,7 @@ function findTrailingInput(
 }
 
 function splitTraces(
-  trace: TraceHistory,
+  trace: Node[] | number[],
 ): { failed: boolean; depth: number; start: number; end: number }[] {
   const result: {
     failed: boolean;
@@ -387,14 +412,20 @@ function splitTraces(
     start: number;
     end: number;
   }[] = [];
-  for (let i = 0; i < trace.length; i += 4) {
-    const { depth, end, failed, start } = parseTraceHistory(
-      trace[i],
-      trace[i + 1],
-      trace[i + 2],
-      trace[i + 3],
-    );
-    result.push({ failed, depth, start, end });
+  if (isNodeTrace(trace)) {
+    for (const node of trace) {
+      result.push({
+        failed: (node.id & TRACE_FAIL) !== 0,
+        depth: node.depth,
+        start: node.start,
+        end: node.end,
+      });
+    }
+  } else {
+    for (let i = 0; i < trace.length; i += 4) {
+      const { depth, end, failed, start } = readLegacyTraceNode(trace, i);
+      result.push({ failed, depth, start, end });
+    }
   }
   return result;
 }
@@ -481,7 +512,8 @@ export function highlight(
   highlightName: string,
 ) {
   const textNode = element.firstChild;
-  if (!CSS.highlights || textNode?.nodeType !== Node.TEXT_NODE) {
+  // 3 == TEXT_NODE
+  if (!CSS.highlights || textNode?.nodeType !== 3) {
     return;
   } else if (!element.id) {
     console.warn("No id element on " + element + "; will skip highlighting");

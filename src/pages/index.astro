@@ -8,7 +8,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 ---
 
 <script>
-  import { ppeg } from "ppegjs";
+  import { compile } from "ppegjs/pPEG.js";
+  import type { Code, Parse } from "ppegjs/pPEG.js";
 
   import {
     generateTreeOutput,
@@ -44,9 +45,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     return "tree";
   };
 
-  type CompileOutput = ReturnType<typeof ppeg.compile>;
-  type CompiledOk = Extract<CompileOutput, { ok: true }>;
-  type ParseOutput = ReturnType<CompiledOk["parse"]>;
   type OutputMode = "tree" | "trace" | "json";
 
   type DemoState = {
@@ -127,7 +125,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       active === input || active === grammar ? (active as HTMLElement) : null;
     const selection = target ? getSelectionOffsets(target) : null;
 
-    const { compileOutput, parseOutput } = compile();
+    const compileOutput = compile(State.grammarText);
+    const parseOutput = compileOutput.parse(State.inputText);
     updateState({
       error: compileOutput.ok === false || parseOutput?.ok === false,
     });
@@ -139,19 +138,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
   };
 
-  const compile = (): {
-    compileOutput: CompileOutput;
-    parseOutput: ParseOutput | null;
-  } => {
-    const compileOutput = ppeg.compile(State.grammarText);
-    if (!compileOutput.ok) {
-      return { compileOutput, parseOutput: null };
-    }
-    const parseOutput = compileOutput.parse(State.inputText);
-    return { compileOutput, parseOutput };
-  };
-
-  const render = (compileOutput: CompileOutput, parseOutput: ParseOutput) => {
+  const render = (compileOutput: Code, parseOutput: Parse) => {
     if (examplesSelect.value !== State.selectedExample) {
       examplesSelect.value = State.selectedExample;
     }
@@ -193,38 +180,28 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       grammarHighlights = errorOutput.highlights;
     } else if (parseOutput) {
       if (State.outputMode === "json") {
-        outputText = JSON.stringify(parseOutput.ptree, null, 2);
+        outputText = JSON.stringify(parseOutput.ptree(), null, 2);
       } else if (State.outputMode === "trace") {
-        const trace = ppeg.show_trace(parseOutput);
-        const traceOutput = generateTraceOutput(
-          State.inputText,
-          trace,
-          parseOutput.error,
-        );
+        const traceOutput = generateTraceOutput(parseOutput);
         outputText = traceOutput.text;
         errorHighlights = traceOutput.errors;
         spanHighlights = traceOutput.spans;
         captureHighlights = traceOutput.captures;
-        grammarHighlights = failedRuleHighlights(
-          State.grammarText,
-          parseOutput.error,
-        );
+        grammarHighlights = failedRuleHighlights(State.grammarText, {
+          fault_rule: failedRuleName(parseOutput),
+        });
       } else {
-        const treeOutput = generateTreeOutput(
-          parseOutput.ptree,
-          parseOutput.error,
-        );
+        const treeOutput = generateTreeOutput(parseOutput);
         outputText = treeOutput.text;
         errorHighlights = treeOutput.errors;
-        grammarHighlights = failedRuleHighlights(
-          State.grammarText,
-          parseOutput.error,
-        );
+        grammarHighlights = failedRuleHighlights(State.grammarText, {
+          fault_rule: failedRuleName(parseOutput),
+        });
       }
 
       if (!parseOutput.ok) {
         const error = findError(
-          parseOutput.trace_history,
+          parseOutput.trace,
           State.inputText.length,
           State.inputText,
         );
@@ -248,10 +225,16 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (fault_rule) {
       const re = new RegExp(`^\\s*${fault_rule}`, "m");
       const start = grammar.search(re);
-      const end = start + fault_rule.length;
+      const end = start + fault_rule.length - 1;
       return [{ start, end }];
     }
     return [];
+  }
+
+  function failedRuleName(parseOutput: Parse): string | undefined {
+    if (parseOutput.ok || parseOutput.fell_short) return undefined;
+    const node = parseOutput.trace[parseOutput.max_trace];
+    return node ? parseOutput.code.id_name(node.idx()) : undefined;
   }
 
   const loadSelectedExample = (selected: string) => {

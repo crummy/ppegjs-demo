@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import peg from "ppegjs/pPEG.mjs";
-import { findError } from "../src/lib/generate-output.ts";
+import { compile } from "ppegjs";
+import { findError, generateTraceOutput } from "../src/lib/generate-output.ts";
 
 const jsonGrammar = String.raw`
 json   = _ value _
@@ -27,18 +27,16 @@ test("findError highlights the inner array error for the malformed JSON example"
     "mixed": [,
 }`;
 
-  const parser = peg.compile(jsonGrammar);
+  const parser = compile(jsonGrammar);
   assert.equal(parser.ok, true);
 
   const parsed = parser.parse(input);
   assert.equal(parsed.ok, false);
-  assert.equal(parsed.error.line, 3);
-  assert.equal(parsed.error.column, 15);
-  assert.equal(parsed.error.found.startsWith(","), true);
-
-  const errorRange = findError(parsed.trace_history, input.length, input);
   const badComma = input.indexOf(",", input.indexOf("["));
+  assert.equal(parsed.max_pos, badComma);
+  assert.deepEqual(parsed.expected, ["quote", "]", false]);
 
+  const errorRange = findError(parsed.trace, input.length, input);
   assert.deepEqual(errorRange, {
     start: badComma,
     end: badComma,
@@ -47,16 +45,42 @@ test("findError highlights the inner array error for the malformed JSON example"
 });
 
 test("findError still highlights unconsumed suffixes after successful top-level parses", () => {
-  const parser = peg.compile("start = 'a'");
+  const parser = compile("start = 'a'");
   assert.equal(parser.ok, true);
 
   const input = "ab";
   const parsed = parser.parse(input);
   assert.equal(parsed.ok, false);
-  assert.equal(parsed.error.type, "incomplete_parse");
+  assert.equal(parsed.fell_short, true);
 
-  assert.deepEqual(findError(parsed.trace_history, input.length, input), {
+  assert.deepEqual(findError(parsed.trace, input.length, input), {
     start: 1,
     end: 1,
   });
+});
+
+test("generateTraceOutput renders rule names instead of numeric ids", () => {
+  const parser = compile(`
+date = year '-' month '-' day
+year =: [0-9]*4
+month =: [0-9]*2
+day =: [0-9]*2
+`);
+  assert.equal(parser.ok, true);
+
+  const parsed = parser.parse("2021-02-03");
+  assert.equal(parsed.ok, true);
+
+  assert.equal(
+    generateTraceOutput(parsed).text,
+    [
+      "0..10 date 2021-02-03",
+      "0..4  │ year 2021",
+      "4..5  │ -",
+      "5..7  │ month 02",
+      "7..8  │ -",
+      "8..10 │ day 03",
+      "",
+    ].join("\n"),
+  );
 });

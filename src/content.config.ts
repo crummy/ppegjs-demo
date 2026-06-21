@@ -11,7 +11,8 @@
  * (input)
  */
 
-import { defineCollection, z } from "astro:content";
+import { defineCollection, } from "astro:content";
+import { z } from "astro/zod";
 import { ppeg } from "ppegjs";
 
 const grammar = `
@@ -46,12 +47,6 @@ type TransformFn = (tree: ParseTree, transform: TransformMap) => TranslatedNode;
 
 type TransformMap = Record<string, TransformFn>;
 
-type FileNode = {
-  grammar: string;
-  input: string;
-  Fields: Record<string, string>;
-};
-
 const parser = ppeg.compile(grammar);
 
 export const examples = defineCollection({
@@ -62,7 +57,9 @@ export const examples = defineCollection({
       eager: true,
     });
     const examples = Object.values(files).map((contents) => {
-      const { ptree }: { ptree: PTree } = parser.parse(contents);
+      const parsed = parser.parse(contents);
+      if (!parsed.ok) throw new Error(parsed.toString());
+      const ptree = parsed.ptree() as PTree;
       const transform = {
         File: obj,
         Fields: obj,
