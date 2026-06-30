@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { compile } from "ppegjs";
-import { findError, generateTraceOutput } from "../src/lib/generate-output.ts";
+import {
+  findError,
+  generateTraceOutput,
+  generateTreeOutput,
+} from "../src/lib/generate-output.ts";
 
 const jsonGrammar = String.raw`
 json   = _ value _
@@ -82,5 +86,36 @@ day =: [0-9]*2
       "8..10 │ day 03",
       "",
     ].join("\n"),
+  );
+});
+
+test("generateTreeOutput formats structured parse errors", () => {
+  const parser = compile(`
+date = year '-' month '-' day
+year =: [0-9]*4
+month =: [0-9]*2
+day =: [0-9]*2
+`);
+  const parsed = parser.parse("2021-02-0d");
+
+  assert.equal(parsed.ok, false);
+  assert.deepEqual(parsed.errors(), {
+    kind: "parse",
+    offset: 9,
+    end: 10,
+    location: {
+      offset: 9,
+      line: 1,
+      column: 10,
+      lineStart: 0,
+      lineEnd: 10,
+      lineText: "2021-02-0d",
+    },
+    fellShort: false,
+    rule: "day",
+  });
+  assert.match(
+    generateTreeOutput(parsed).text,
+    /\*\*\* parse failed at: 9 of: 10\nline 1 \| 2021-02-0d\n                  \^ failed/,
   );
 });

@@ -1,4 +1,13 @@
-import type { Code, Node, Parse, PtreeNode } from "ppegjs/pPEG.js";
+import type {
+  Code,
+  CodeError,
+  Expected,
+  Node,
+  Parse,
+  ParseError,
+  PtreeNode,
+  RuntimeExpr,
+} from "ppegjs/pPEG.js";
 
 export type Range = {
   start: number;
@@ -11,7 +20,10 @@ export function generateTreeOutput(parse: Parse): {
   text: string;
   errors: Range[];
 } {
-  return generateTreeNodeOutput(parse.ptree(), parse.ok ? null : String(parse));
+  return generateTreeNodeOutput(
+    parse.ptree(),
+    parse.ok ? null : formatParseError(parse.errors()),
+  );
 }
 
 function generateTreeNodeOutput(
@@ -119,7 +131,7 @@ export function generateTraceOutput(parse: Parse): {
   captures: Range[];
 } {
   const { code, input, trace } = parse;
-  const error = parse.ok ? null : String(parse);
+  const error = parse.ok ? null : formatParseError(parse.errors());
   let text = "";
   // These ranges store indexes of start..end into the returned text for highlighting
   const errors: Range[] = [];
@@ -303,9 +315,8 @@ export function generateGrammarCompileErrorOutput(
   text: string;
   highlights: Range[];
 } {
-  const error = compiled.errors() ?? {};
-  // const message = error.message ?? "Unknown grammar compile error.";
-  const lines: string[] = ["Grammar compile error", `${error}: N/a`];
+  const error = compiled.errors();
+  const lines = formatCodeError(error).split("\n");
   const highlights: Range[] = [];
   //
   // if (error.fault_rule) lines.push(`Fault rule: ${error.fault_rule}`);
@@ -330,6 +341,85 @@ export function generateGrammarCompileErrorOutput(
   const text = lines.join("\n");
 
   return { text, highlights };
+}
+
+export function formatCodeError(error: CodeError | null): string {
+  const lines = ["Grammar compile error"];
+  if (!error || error.messages.length === 0) {
+    lines.push("Unknown grammar compile error.");
+  } else {
+    lines.push(...error.messages);
+  }
+  return lines.join("\n");
+}
+
+export function formatParseError(error: ParseError | null): string {
+  if (!error) return "";
+
+  const atPos = `at: ${error.offset} of: ${error.end}`;
+  const title = `*** parse failed ${atPos}${formatEmptyAlternative(error)}`;
+  return `${title}\n${formatLocation(error)}`;
+}
+
+function formatLocation(error: ParseError): string {
+  const lines: string[] = [];
+  const { location } = error;
+  if (location.previousLineText !== undefined && location.previousLine) {
+    lines.push(
+      `line ${location.previousLine} | ${cleanErrorChars(location.previousLineText)}`,
+    );
+  }
+
+  const beforeCaret = cleanErrorChars(
+    location.lineText.slice(0, error.offset - location.lineStart),
+  );
+  const afterCaret =
+    error.offset === error.end
+      ? ""
+      : location.lineText.slice(error.offset - location.lineStart);
+  const left = `line ${location.line} | ${beforeCaret}`;
+  const note = formatParseNote(error);
+  lines.push(`${left}${afterCaret}`);
+  lines.push(`${" ".repeat(left.length)}^ ${note}`);
+  return lines.join("\n");
+}
+
+function formatParseNote(error: ParseError): string {
+  if (error.fellShort) return "unexpected input, parse ok on input before this";
+  if (error.expected) {
+    return `failed, expected: ${formatExpected(error.expected)}`;
+  }
+  return "failed";
+}
+
+function formatExpected(expected: Expected): string {
+  if (expected.kind === "literal") {
+    return `'${expected.value}'${expected.caseInsensitive ? "i" : ""}`;
+  }
+  if (expected.kind === "rule") {
+    return expected.name;
+  }
+  return formatExpression(expected.expression);
+}
+
+function formatExpression(expression: RuntimeExpr): string {
+  return JSON.stringify(expression);
+}
+
+function formatEmptyAlternative(error: ParseError): string {
+  const emptyAlternative = error.emptyAlternative;
+  if (!emptyAlternative) return "";
+
+  const detail = emptyAlternative.rule
+    ? `alternative '${emptyAlternative.rule}' was an empty '' match!`
+    : `alternative ${emptyAlternative.index} was an empty '' match!`;
+  return `\n*** in: ${JSON.stringify(emptyAlternative.alternatives)}\n    ${detail}`;
+}
+
+function cleanErrorChars(value: string): string {
+  return value.replace(/[^\S\r\n]|[\u0000-\u001F]/g, (char) =>
+    char < " " ? " " : char,
+  );
 }
 
 /**

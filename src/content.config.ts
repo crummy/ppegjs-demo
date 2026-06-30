@@ -14,6 +14,7 @@
 import { defineCollection, } from "astro:content";
 import { z } from "astro/zod";
 import { ppeg } from "ppegjs";
+import { formatParseError } from "./lib/generate-output";
 
 const grammar = `
 File    = Fields _sep grammar _sep input
@@ -58,7 +59,7 @@ export const examples = defineCollection({
     });
     const examples = Object.values(files).map((contents) => {
       const parsed = parser.parse(contents);
-      if (!parsed.ok) throw new Error(parsed.toString());
+      if (!parsed.ok) throw new Error(formatParseError(parsed.errors()));
       const ptree = parsed.ptree() as PTree;
       const transform = {
         File: obj,
