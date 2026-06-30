@@ -310,14 +310,17 @@ function escapeTraceInput(value: string): string {
 
 export function generateGrammarCompileErrorOutput(
   grammarText: string,
-  compiled: Code,
+  errorSource: Code | CodeError | ParseError | null,
 ): {
   text: string;
   highlights: Range[];
 } {
-  const error = compiled.errors();
-  const lines = formatCodeError(error).split("\n");
+  const error = readGrammarError(errorSource);
+  const lines = formatGrammarError(error).split("\n");
   const highlights: Range[] = [];
+  if (error?.kind === "parse") {
+    highlights.push({ start: error.offset, end: error.offset });
+  }
   //
   // if (error.fault_rule) lines.push(`Fault rule: ${error.fault_rule}`);
   // if (typeof error.rule === "string" && error.rule.length > 0) {
@@ -341,6 +344,21 @@ export function generateGrammarCompileErrorOutput(
   const text = lines.join("\n");
 
   return { text, highlights };
+}
+
+type GrammarError = CodeError | ParseError | null;
+
+function readGrammarError(errorSource: Code | GrammarError): GrammarError {
+  if (!errorSource) return null;
+  if ("kind" in errorSource) return errorSource;
+  return errorSource.errors();
+}
+
+export function formatGrammarError(error: GrammarError): string {
+  if (error?.kind === "parse") {
+    return ["Grammar compile error", formatParseError(error)].join("\n");
+  }
+  return formatCodeError(error);
 }
 
 export function formatCodeError(error: CodeError | null): string {

@@ -4,6 +4,7 @@ import test from "node:test";
 import { compile } from "ppegjs";
 import {
   findError,
+  generateGrammarCompileErrorOutput,
   generateTraceOutput,
   generateTreeOutput,
 } from "../src/lib/generate-output.ts";
@@ -118,4 +119,23 @@ day =: [0-9]*2
     generateTreeOutput(parsed).text,
     /\*\*\* parse failed at: 9 of: 10\nline 1 \| 2021-02-0d\n                  \^ failed/,
   );
+});
+
+test("generateGrammarCompileErrorOutput formats thrown compile errors", () => {
+  let compileError: unknown = null;
+  try {
+    compile("date = ");
+  } catch (error) {
+    compileError = error;
+  }
+
+  const output = generateGrammarCompileErrorOutput(
+    "date = ",
+    compileError as Parameters<typeof generateGrammarCompileErrorOutput>[1],
+  );
+
+  assert.deepEqual(output.highlights, [{ start: 7, end: 7 }]);
+  assert.match(output.text, /Grammar compile error/);
+  assert.match(output.text, /\*\*\* parse failed at: 7 of: 7/);
+  assert.match(output.text, /failed, expected: alt/);
 });

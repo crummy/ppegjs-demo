@@ -9,7 +9,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
 <script>
   import { compile } from "ppegjs/pPEG.js";
-  import type { Code, Parse } from "ppegjs/pPEG.js";
+  import type { Code, CodeError, Parse, ParseError } from "ppegjs/pPEG.js";
 
   import {
     generateTreeOutput,
@@ -46,6 +46,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   };
 
   type OutputMode = "tree" | "trace" | "json";
+  type GrammarError = CodeError | ParseError;
 
   type DemoState = {
     selectedExample: string;
@@ -107,8 +108,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     if (State.workspace === "example") {
       updateState({
         workspace: "scratch",
-        grammarText: readStorage(STORAGE_KEYS.scratchGrammar) ?? "",
-        inputText: readStorage(STORAGE_KEYS.scratchInput) ?? "",
+        grammarText: readStorage(STORAGE_KEYS.scratchGrammar) ?? "# Enter your grammar here.\na = 'a'",
+        inputText: readStorage(STORAGE_KEYS.scratchInput) ?? "a",
       });
       runWithCaret();
     } else {
@@ -125,12 +126,20 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       active === input || active === grammar ? (active as HTMLElement) : null;
     const selection = target ? getSelectionOffsets(target) : null;
 
-    const compileOutput = compile(State.grammarText);
-    const parseOutput = compileOutput.parse(State.inputText);
-    updateState({
-      error: compileOutput.ok === false || parseOutput?.ok === false,
-    });
-    render(compileOutput, parseOutput);
+    let compileOutput: Code | null = null;
+    let parseOutput: Parse | null = null;
+    let compileError: GrammarError | null = null;
+    try {
+      compileOutput = compile(State.grammarText);
+      parseOutput = compileOutput.parse(State.inputText);
+      updateState({ error: false });
+    } catch (error) {
+      updateState({ error: true });
+      compileError = isGrammarError(error) ? error : null;
+      if (!compileError) throw error;
+    }
+
+    render(compileOutput, parseOutput, compileError);
 
     if (target && selection) {
       target.focus();
@@ -138,7 +147,11 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
   };
 
-  const render = (compileOutput: Code, parseOutput: Parse) => {
+  const render = (
+    compileOutput: Code | null,
+    parseOutput: Parse | null,
+    compileError: GrammarError | null = null,
+  ) => {
     if (examplesSelect.value !== State.selectedExample) {
       examplesSelect.value = State.selectedExample;
     }
@@ -171,10 +184,10 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     let spanHighlights: Range[] = [];
     let captureHighlights: Range[] = [];
 
-    if (compileOutput && !compileOutput?.ok) {
+    if (compileError || (compileOutput && !compileOutput?.ok)) {
       const errorOutput = generateGrammarCompileErrorOutput(
         State.grammarText,
-        compileOutput,
+        compileError ?? compileOutput,
       );
       outputText = errorOutput.text;
       grammarHighlights = errorOutput.highlights;
@@ -217,6 +230,13 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     highlight(output, spanHighlights, "highlight-spans");
     highlight(output, captureHighlights, "highlight-captures");
   };
+
+  function isGrammarError(error: unknown): error is GrammarError {
+    if (!error || typeof error !== "object" || !("kind" in error)) {
+      return false;
+    }
+    return error.kind === "grammar" || error.kind === "parse";
+  }
 
   function failedRuleHighlights(
     grammar: string,
