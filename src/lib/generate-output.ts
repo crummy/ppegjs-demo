@@ -341,6 +341,27 @@ export function generateGrammarCompileErrorOutput(
   return { text, highlights };
 }
 
+export function failedRuleHighlights(
+  grammar: string,
+  { fault_rule }: { fault_rule?: string } = {},
+) {
+  if (fault_rule) {
+    const re = new RegExp(
+      `(^|\\r?\\n)([ \\t]*)(${escapeRegExp(fault_rule)})`,
+      "m",
+    );
+    const match = re.exec(grammar);
+    if (!match) return [];
+
+    const linePrefix = match[1] ?? "";
+    const indentation = match[2] ?? "";
+    const start = match.index + linePrefix.length + indentation.length;
+    const end = start + fault_rule.length - 1;
+    return [{ start, end }];
+  }
+  return [];
+}
+
 type GrammarError = CodeError | ParseError | null;
 
 function readGrammarError(errorSource: Code | GrammarError): GrammarError {

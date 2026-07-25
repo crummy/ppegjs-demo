@@ -24,6 +24,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     generateGrammarCompileErrorOutput,
     type Range,
     highlight,
+    failedRuleHighlights,
   } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
   import { formatCompactJson } from "../lib/json";
@@ -275,19 +276,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       return false;
     }
     return error.kind === "grammar" || error.kind === "parse";
-  }
-
-  function failedRuleHighlights(
-    grammar: string,
-    { fault_rule }: { fault_rule?: string } = {},
-  ) {
-    if (fault_rule) {
-      const re = new RegExp(`^\\s*${fault_rule}`, "m");
-      const start = grammar.search(re);
-      const end = start + fault_rule.length - 1;
-      return [{ start, end }];
-    }
-    return [];
   }
 
   function failedRuleName(parseOutput: Parse): string | undefined {

@@ -5,6 +5,7 @@ import { compile } from "ppegjs";
 import { formatCompactJson } from "../src/lib/json.ts";
 import {
   findError,
+  failedRuleHighlights,
   generateGrammarCompileErrorOutput,
   generateTraceOutput,
   generateTreeOutput,
@@ -183,6 +184,23 @@ day =: [0-9]*2
   assert.deepEqual(
     output.errors.map((range) => output.text.slice(range.start, range.end + 1)),
     ["date", "day", "d", "d"],
+  );
+});
+
+test("failedRuleHighlights highlights the rule name after leading grammar newlines", () => {
+  const grammar = `
+
+Date   = year '-' month '-' day
+year   = [0-9]*4
+month  = [0-9]*2
+day    = [0-9]*2
+`;
+
+  const output = failedRuleHighlights(grammar, { fault_rule: "Date" });
+
+  assert.deepEqual(
+    output.map((range) => grammar.slice(range.start, range.end + 1)),
+    ["Date"],
   );
 });
 
