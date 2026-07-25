@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { compile } from "ppegjs";
+import { formatCompactJson } from "../src/lib/json.ts";
 import {
   findError,
   generateGrammarCompileErrorOutput,
@@ -25,6 +26,47 @@ _exp   = [eE] [+-]? [0-9]+
 lit    = 'true' / 'false' / 'null'
 _      = [ \t\n\r]*
 `;
+
+test("formatCompactJson keeps short parse tree nodes inline", () => {
+  const tree = [
+    "Obj",
+    [
+      [
+        "memb",
+        [
+          ["Str", [["chars", "a"]]],
+          ["num", "1"],
+        ],
+      ],
+      [
+        "memb",
+        [
+          ["Str", [["chars", "b"]]],
+          [
+            "Arr",
+            [
+              ["num", "2"],
+              ["num", "3"],
+            ],
+          ],
+        ],
+      ],
+    ],
+  ];
+
+  assert.equal(
+    formatCompactJson(tree, { maxWidth: 80 }),
+    [
+      "[",
+      '  "Obj",',
+      "  [",
+      '    ["memb", [["Str", [["chars", "a"]]], ["num", "1"]]],',
+      '    ["memb", [["Str", [["chars", "b"]]], ["Arr", [["num", "2"], ["num", "3"]]]]]',
+      "  ]",
+      "]",
+    ].join("\n"),
+  );
+});
 
 test("findError highlights the inner array error for the malformed JSON example", () => {
   const input = `{

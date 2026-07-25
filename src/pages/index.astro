@@ -26,6 +26,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     highlight,
   } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
+  import { formatCompactJson } from "../lib/json";
   import type { TraceOptions } from "../lib/generate-output.ts";
 
   // A little helper to save us from doing null checks later
@@ -230,7 +231,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       grammarHighlights = errorOutput.highlights;
     } else if (parseOutput) {
       if (State.outputMode === "json") {
-        outputText = JSON.stringify(parseOutput.ptree(), null, 2);
+        outputText = formatCompactJson(parseOutput.ptree(), { maxWidth: 80 });
       } else if (State.outputMode === "trace") {
         const traceOutput = generateTraceOutput(parseOutput);
         outputText = traceOutput.text;
