@@ -14,8 +14,6 @@ export type Range = {
   end: number;
 };
 
-export type TraceOptions = { showAnonymous: boolean; showEmpty: boolean };
-
 export function generateTreeOutput(parse: Parse): {
   text: string;
   captures: Range[];

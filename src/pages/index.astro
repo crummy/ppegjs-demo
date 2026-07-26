@@ -28,7 +28,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   } from "../lib/generate-output";
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
   import { formatCompactJson } from "../lib/json";
-  import type { TraceOptions } from "../lib/generate-output.ts";
+  import {
+    readUrlState,
+    writeUrlState,
+    type OutputMode,
+    type UrlState,
+  } from "../lib/url-state";
 
   // A little helper to save us from doing null checks later
   const getElement = <T extends Element>(selector: string): T => {
@@ -57,7 +62,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     return "tree";
   };
 
-  type OutputMode = "tree" | "trace" | "json";
   type GrammarError = CodeError | ParseError;
 
   type DemoState = {
@@ -69,17 +73,11 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     showNotes: boolean;
     outputMode: OutputMode;
     error: boolean;
-    options: TraceOptions;
   };
 
   const STORAGE_KEYS = {
     scratchGrammar: "scratch-grammar",
     scratchInput: "scratch-input",
-    workspace: "workspace",
-    showAnonymous: "show-anonymous",
-    showEmpty: "show-empty",
-    selectedExample: "selected-example",
-    outputMode: "output-mode",
   } as const;
 
   const readStorage = (key: string): string | null => {
@@ -107,11 +105,38 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     showNotes: true,
     outputMode: outputModeFromDom(),
     error: false,
-    options: { showAnonymous: false, showEmpty: false },
   };
 
   const updateState = (partial: Partial<DemoState>) => {
     Object.assign(State, partial);
+  };
+
+  const findExampleOption = (selected: string | null) =>
+    selected
+      ? Array.from(examplesSelect.options).find((o) => o.value === selected)
+      : undefined;
+
+  const defaultSelectedExample =
+    Array.from(examplesSelect.options).find(
+      (e) => e.dataset["defaultSelected"] === "true",
+    )?.value ?? examplesSelect.value;
+
+  const readDemoUrlState = (): UrlState => {
+    const urlState = readUrlState(window.location);
+    return {
+      selectedExample:
+        findExampleOption(urlState.selectedExample)?.value ?? null,
+      scratchEnabled: urlState.scratchEnabled,
+      outputMode: urlState.outputMode,
+    };
+  };
+
+  const writeDemoUrlState = () => {
+    writeUrlState(window.location, window.history, {
+      selectedExample: State.selectedExample,
+      scratchEnabled: State.workspace === "scratch",
+      outputMode: State.outputMode,
+    });
   };
 
   const saveScratch = () => {
@@ -135,6 +160,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       updateState({ workspace: "example" });
       loadSelectedExample(State.selectedExample);
     }
+    writeDemoUrlState();
   };
 
   // saves the current cursor location, compiles, then restores the location
@@ -285,7 +311,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   }
 
   const loadSelectedExample = (selected: string) => {
-    const option = getElement<HTMLOptionElement>(`#option-${selected}`);
+    const option = findExampleOption(selected);
+    if (!option) return;
     updateState({
       selectedExample: selected,
       workspace: "example",
@@ -295,6 +322,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       showNotes: true,
     });
     runWithCaret();
+    writeDemoUrlState();
   };
 
   const editableText = (editable: HTMLElement) => {
@@ -411,8 +439,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     radio.addEventListener("change", () => {
       const outputMode = outputModeFromDom();
       updateState({ outputMode });
-      writeStorage(STORAGE_KEYS.outputMode, outputMode);
       runWithCaret();
+      writeDemoUrlState();
     });
   }
 
@@ -427,37 +455,19 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     (grammarText) => updateState({ grammarText }),
   );
 
-  const defaultSelectedExample = examplesSelect
-    .querySelectorAll("option")
-    .values()
-    .find((e) => e.dataset["defaultSelected"] === "true")?.value;
-  const lastSelectedExample = examplesSelect
-    .querySelectorAll("option")
-    .values()
-    .find((e) => e.dataset["titleEscaped"] === readStorage(STORAGE_KEYS.selectedExample))?.value;
-  const outputModeFromStorage = readStorage(STORAGE_KEYS.outputMode);
+  const urlState = readDemoUrlState();
   updateState({
-    selectedExample: lastSelectedExample ?? defaultSelectedExample,
-    outputMode:
-      outputModeFromStorage === "trace" || outputModeFromStorage === "json"
-        ? outputModeFromStorage
-        : "tree",
+    selectedExample: urlState.selectedExample ?? defaultSelectedExample,
+    outputMode: urlState.outputMode,
   });
 
-  const workspaceFromStorage = readStorage(STORAGE_KEYS.workspace);
-  if (workspaceFromStorage === "scratch") {
+  if (urlState.scratchEnabled) {
     toggleScratch();
   } else {
     loadSelectedExample(State.selectedExample);
   }
 
-  window.addEventListener("beforeunload", () => {
-    saveScratch();
-    writeStorage(STORAGE_KEYS.workspace, State.workspace);
-    writeStorage(STORAGE_KEYS.showEmpty, State.options.showEmpty.toString());
-    writeStorage(STORAGE_KEYS.selectedExample, State.selectedExample);
-    writeStorage(STORAGE_KEYS.outputMode, State.outputMode);
-  });
+  window.addEventListener("beforeunload", saveScratch);
 </script>
 
 <Layout>
