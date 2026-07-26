@@ -430,10 +430,13 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     .querySelectorAll("option")
     .values()
     .find((e) => e.dataset["defaultSelected"] === "true")?.value;
+  const lastSelectedExample = examplesSelect
+    .querySelectorAll("option")
+    .values()
+    .find((e) => e.dataset["titleEscaped"] === readStorage(STORAGE_KEYS.selectedExample))?.value;
   const outputModeFromStorage = readStorage(STORAGE_KEYS.outputMode);
   updateState({
-    selectedExample:
-      readStorage(STORAGE_KEYS.selectedExample) ?? defaultSelectedExample,
+    selectedExample: lastSelectedExample ?? defaultSelectedExample,
     outputMode:
       outputModeFromStorage === "trace" || outputModeFromStorage === "json"
         ? outputModeFromStorage
@@ -728,6 +731,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
                 <option
                   id={`option-${titleEscaped}`}
                   value={titleEscaped}
+                  data-title-escaped={titleEscaped}
                   data-grammar={grammar}
                   data-input={input}
                   data-notes-template-id={notesTemplateId}
