@@ -145,22 +145,27 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     writeStorage(STORAGE_KEYS.scratchInput, State.inputText);
   };
 
+  const loadScratch = () => {
+    updateState({
+      workspace: "scratch",
+      grammarText:
+        readStorage(STORAGE_KEYS.scratchGrammar) ??
+        "# Enter your grammar here.\na = 'a'",
+      inputText: readStorage(STORAGE_KEYS.scratchInput) ?? "a",
+      notesTemplateId: "",
+    });
+    runWithCaret();
+  };
+
   const toggleScratch = () => {
     if (State.workspace === "example") {
-      updateState({
-        workspace: "scratch",
-        grammarText:
-          readStorage(STORAGE_KEYS.scratchGrammar) ??
-          "# Enter your grammar here.\na = 'a'",
-        inputText: readStorage(STORAGE_KEYS.scratchInput) ?? "a",
-        notesTemplateId: "",
-      });
-      runWithCaret();
-    } else {
-      updateState({ workspace: "example" });
-      loadSelectedExample(State.selectedExample);
+      loadScratch();
+      writeDemoUrlState();
+      return;
     }
-    writeDemoUrlState();
+
+    updateState({ workspace: "example" });
+    loadSelectedExample(State.selectedExample);
   };
 
   // saves the current cursor location, compiles, then restores the location
@@ -310,9 +315,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     return node ? parseOutput.code.id_name(node.idx()) : undefined;
   }
 
-  const loadSelectedExample = (selected: string) => {
+  const loadSelectedExample = (selected: string, writeUrl = true) => {
     const option = findExampleOption(selected);
     if (!option) return;
+    if (State.workspace === "scratch") {
+      saveScratch();
+    }
     updateState({
       selectedExample: selected,
       workspace: "example",
@@ -322,7 +330,9 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       showNotes: true,
     });
     runWithCaret();
-    writeDemoUrlState();
+    if (writeUrl) {
+      writeDemoUrlState();
+    }
   };
 
   const editableText = (editable: HTMLElement) => {
@@ -455,19 +465,26 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     (grammarText) => updateState({ grammarText }),
   );
 
-  const urlState = readDemoUrlState();
-  updateState({
-    selectedExample: urlState.selectedExample ?? defaultSelectedExample,
-    outputMode: urlState.outputMode,
-  });
+  const applyDemoUrlState = () => {
+    const urlState = readDemoUrlState();
+    const selectedExample = urlState.selectedExample ?? defaultSelectedExample;
+    updateState({
+      selectedExample,
+      outputMode: urlState.outputMode,
+    });
 
-  if (urlState.scratchEnabled) {
-    toggleScratch();
-  } else {
-    loadSelectedExample(State.selectedExample);
-  }
+    if (urlState.scratchEnabled) {
+      loadScratch();
+    } else {
+      // do not write to URL hash - otherwise infinite loop
+      loadSelectedExample(selectedExample, false);
+    }
+  };
+
+  applyDemoUrlState();
 
   window.addEventListener("beforeunload", saveScratch);
+  window.addEventListener("hashchange", applyDemoUrlState);
 </script>
 
 <Layout>
@@ -502,6 +519,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
 
     .notes {
+      background: whitesmoke;
       border-bottom: thin solid gray;
       display: flex;
       flex-direction: column;
@@ -516,8 +534,6 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
 
     .notes-header {
-      background: whitesmoke;
-      border-bottom: thin solid #ddd;
       padding: 2px 10px;
       text-align: right;
     }

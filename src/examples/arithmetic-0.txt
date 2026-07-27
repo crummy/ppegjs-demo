@@ -1,9 +1,0 @@
-title: Arithmetic
----
-expr = mul (add mul)*
-mul  = num (mop num)*
-num  = [0-9]+
-add  = '+' / '-'
-mop  = '*' / '/'
----
-1+2*3

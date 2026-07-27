@@ -13,3 +13,22 @@ MDY   = month '/' day '/' year
 
 ---
 2/3/2026
+---
+Standard country dates use a day/month/year format:
+
+```
+DMY   = day '/' month '/' year
+```
+
+Except for USA that uses a month/day/year format:
+
+```
+MDY   = month '/' day '/' year
+```
+
+The PEG grammar for DMY and MDY are the same syntax,
+so these date formats are *ambiguous*.
+
+The PEG rule names provide *semantic* labels.
+
+The d (digit) rule is an *anonymous* match.

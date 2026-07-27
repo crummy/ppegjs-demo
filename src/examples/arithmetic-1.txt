@@ -1,11 +1,22 @@
-title: Arithmetic (2)
+title: Arithmetic (1)
 ---
 expr = mul (add mul)*
-mul  = val (mop val)*
-val  = var / num
-var  = [a-z]+
+mul  = num (mop num)*
 num  = [0-9]+
 add  = '+' / '-'
 mop  = '*' / '/'
 ---
-x+y*z-1
+1+2*3
+---
+Simple classic expression grammar for integers.
+
+```
+Precedence  Operator
+1           * /
+2           + -
+```
+
+Example:
+```
+1+2*3   =>   1+(2*3)
+```

@@ -1,0 +1,20 @@
+title: Arithmetic (4)
+--- peg
+expr  = prod (addop prod)*
+prod  = value (mulop value)*
+value = _ val _
+val   = var / num / group
+group = '(' expr ')'
+var   = [a-z]+
+num   = [0-9]+ ('.' [0-9]+)*
+addop = '+' / '-'
+mulop = '*' / '/'
+_     = [ \t\n\r]*
+---
+k * (max - 1.2) + min/3
+---
+Extends [Arithmetic (3)](#example=arithmetic-3-) to allow white-space
+
+```
+k * (max - 1.2) + min/3    =>   (k*(max-1.2))+(min/3)
+```

@@ -1,0 +1,19 @@
+title: Arithmetic (3)
+---
+expr = mul (add mul)*
+mul  = val (mop val)*
+val  = _ (grp / var / num) _
+grp  = '(' expr ')'
+var  = [a-zA-Z_] [a-zA-Z0-9_]*
+num  = [0-9]+ ('.' [0-9]+)?
+add  = '+' / '-'
+mop  = '*' / '/'
+_    = [ \t\n\r]*
+---
+x+y*(z-1)
+---
+Extends [Arithmetic (2)](#example=arithmetic-2-) with parentheses
+
+```
+x+y*(z-1)  =>  x+(y*(z-1))
+```
