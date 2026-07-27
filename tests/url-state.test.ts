@@ -7,6 +7,7 @@ test("parseUrlState reads selected example and scratch mode from hash", () => {
   assert.deepEqual(parseUrlState("#example=json&scratch=true&mode=trace"), {
     selectedExample: "json",
     scratchEnabled: true,
+    scratchPayload: null,
     outputMode: "trace",
   });
 });
@@ -15,6 +16,7 @@ test("parseUrlState handles missing optional hash values", () => {
   assert.deepEqual(parseUrlState(""), {
     selectedExample: null,
     scratchEnabled: false,
+    scratchPayload: null,
     outputMode: "tree",
   });
 });
@@ -23,6 +25,16 @@ test("parseUrlState falls back to tree for unknown output modes", () => {
   assert.deepEqual(parseUrlState("#example=url&mode=bad"), {
     selectedExample: "url",
     scratchEnabled: false,
+    scratchPayload: null,
+    outputMode: "tree",
+  });
+});
+
+test("parseUrlState reads scratch payload data from hash", () => {
+  assert.deepEqual(parseUrlState("#example=json&scratch=true&data=abc123"), {
+    selectedExample: "json",
+    scratchEnabled: true,
+    scratchPayload: "abc123",
     outputMode: "tree",
   });
 });
@@ -46,5 +58,17 @@ test("formatUrlHash includes non-default state", () => {
       outputMode: "json",
     }),
     "#example=url&scratch=true&mode=json",
+  );
+});
+
+test("formatUrlHash includes scratch payload data before mode", () => {
+  assert.equal(
+    formatUrlHash({
+      selectedExample: "url",
+      scratchEnabled: true,
+      scratchPayload: "abc123",
+      outputMode: "json",
+    }),
+    "#example=url&scratch=true&data=abc123&mode=json",
   );
 });

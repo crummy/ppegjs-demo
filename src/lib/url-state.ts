@@ -3,12 +3,14 @@ export type OutputMode = "tree" | "trace" | "json";
 export type UrlState = {
   selectedExample: string | null;
   scratchEnabled: boolean;
+  scratchPayload: string | null;
   outputMode: OutputMode;
 };
 
 export type WritableUrlState = {
   selectedExample: string;
   scratchEnabled: boolean;
+  scratchPayload?: string | null;
   outputMode: OutputMode;
 };
 
@@ -27,6 +29,7 @@ export const parseUrlState = (hash: string): UrlState => {
   return {
     selectedExample: params.get("example"),
     scratchEnabled: params.get("scratch") === "true",
+    scratchPayload: params.get("data"),
     outputMode: parseOutputMode(params.get("mode")),
   };
 };
@@ -36,6 +39,9 @@ export const formatUrlHash = (state: WritableUrlState): string => {
   params.set("example", state.selectedExample);
   if (state.scratchEnabled) {
     params.set("scratch", "true");
+  }
+  if (state.scratchPayload) {
+    params.set("data", state.scratchPayload);
   }
   if (state.outputMode !== "tree") {
     params.set("mode", state.outputMode);

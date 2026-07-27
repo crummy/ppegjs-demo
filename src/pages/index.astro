@@ -29,6 +29,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   import { getSelectionOffsets, restoreSelectionOffsets } from "../lib/caret";
   import { formatCompactJson } from "../lib/json";
   import {
+    decodeScratchPayload,
+    encodeScratchPayload,
+    type ScratchPayload,
+  } from "../lib/scratch-url";
+  import {
+    formatUrlHash,
     readUrlState,
     writeUrlState,
     type OutputMode,
@@ -51,6 +57,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const notes = getElement<HTMLDivElement>("#notes");
   const notesContent = getElement<HTMLDivElement>("#notes-content");
   const notesToggle = getElement<HTMLButtonElement>("#notes-toggle");
+  const copyUrlButton = getElement<HTMLButtonElement>("#copy-url");
   const outputModeRadios = document.querySelectorAll<HTMLInputElement>(
     'input[name="output-mode"]',
   );
@@ -127,6 +134,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       selectedExample:
         findExampleOption(urlState.selectedExample)?.value ?? null,
       scratchEnabled: urlState.scratchEnabled,
+      scratchPayload: urlState.scratchPayload,
       outputMode: urlState.outputMode,
     };
   };
@@ -145,13 +153,15 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     writeStorage(STORAGE_KEYS.scratchInput, State.inputText);
   };
 
-  const loadScratch = () => {
+  const loadScratch = (payload: ScratchPayload | null = null) => {
     updateState({
       workspace: "scratch",
       grammarText:
+        payload?.grammarText ??
         readStorage(STORAGE_KEYS.scratchGrammar) ??
         "# Enter your grammar here.\na = 'a'",
-      inputText: readStorage(STORAGE_KEYS.scratchInput) ?? "a",
+      inputText:
+        payload?.inputText ?? readStorage(STORAGE_KEYS.scratchInput) ?? "a",
       notesTemplateId: "",
     });
     runWithCaret();
@@ -219,6 +229,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
 
     const hasNotes =
       State.workspace === "example" && State.notesTemplateId.length > 0;
+    const hasScratchUrlControls = State.workspace === "scratch";
     notesContent.replaceChildren();
     if (hasNotes) {
       const template = getElement<HTMLTemplateElement>(
@@ -227,13 +238,17 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       notesContent.append(template.content.cloneNode(true));
     }
     notesToggle.classList.toggle("hidden", !hasNotes);
+    copyUrlButton.classList.toggle("hidden", !hasScratchUrlControls);
     notesToggle.setAttribute(
       "aria-expanded",
       State.showNotes ? "true" : "false",
     );
     notesToggle.innerText = "Notes";
-    outputContent.classList.toggle("has-notes", hasNotes && State.showNotes);
-    notes.classList.toggle("hidden", !hasNotes);
+    outputContent.classList.toggle(
+      "has-notes",
+      (hasNotes && State.showNotes) || hasScratchUrlControls,
+    );
+    notes.classList.toggle("hidden", !hasNotes && !hasScratchUrlControls);
     notes.classList.toggle("collapsed", !State.showNotes);
     notesContent.classList.toggle("hidden", !State.showNotes);
 
@@ -445,6 +460,50 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     runWithCaret();
   });
 
+  const COPY_URL_MAX_LENGTH = 12_000;
+  let copyUrlStatusTimer: number | null = null;
+
+  const setCopyUrlButtonText = (text: string) => {
+    copyUrlButton.innerText = text;
+    if (copyUrlStatusTimer !== null) {
+      window.clearTimeout(copyUrlStatusTimer);
+    }
+    copyUrlStatusTimer = window.setTimeout(() => {
+      copyUrlButton.innerText = "Copy URL";
+      copyUrlStatusTimer = null;
+    }, 1_500);
+  };
+
+  const buildScratchUrl = async (): Promise<string> => {
+    const scratchPayload = await encodeScratchPayload({
+      grammarText: State.grammarText,
+      inputText: State.inputText,
+    });
+    const url = new URL(window.location.href);
+    url.hash = formatUrlHash({
+      selectedExample: State.selectedExample,
+      scratchEnabled: true,
+      scratchPayload,
+      outputMode: State.outputMode,
+    });
+    return url.toString();
+  };
+
+  copyUrlButton.addEventListener("click", async () => {
+    try {
+      const scratchUrl = await buildScratchUrl();
+      if (scratchUrl.length > COPY_URL_MAX_LENGTH) {
+        setCopyUrlButtonText("Too large");
+        return;
+      }
+
+      await navigator.clipboard.writeText(scratchUrl);
+      setCopyUrlButtonText("Copied");
+    } catch {
+      setCopyUrlButtonText("Copy failed");
+    }
+  });
+
   for (const radio of outputModeRadios) {
     radio.addEventListener("change", () => {
       const outputMode = outputModeFromDom();
@@ -465,7 +524,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     (grammarText) => updateState({ grammarText }),
   );
 
-  const applyDemoUrlState = () => {
+  const applyDemoUrlState = async () => {
     const urlState = readDemoUrlState();
     const selectedExample = urlState.selectedExample ?? defaultSelectedExample;
     updateState({
@@ -474,17 +533,19 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     });
 
     if (urlState.scratchEnabled) {
-      loadScratch();
+      loadScratch(await decodeScratchPayload(urlState.scratchPayload));
     } else {
       // do not write to URL hash - otherwise infinite loop
       loadSelectedExample(selectedExample, false);
     }
   };
 
-  applyDemoUrlState();
+  void applyDemoUrlState();
 
   window.addEventListener("beforeunload", saveScratch);
-  window.addEventListener("hashchange", applyDemoUrlState);
+  window.addEventListener("hashchange", () => {
+    void applyDemoUrlState();
+  });
 </script>
 
 <Layout>
@@ -542,6 +603,10 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       align-items: center;
       display: inline-flex;
       gap: 0.3rem;
+    }
+
+    #notes-toggle.hidden {
+      display: none;
     }
 
     #notes-toggle::after {
@@ -670,7 +735,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     }
 
     #scratch,
-    #notes-toggle {
+    #notes-toggle,
+    #copy-url {
       padding: 0.1rem 0.5rem;
       border: thin solid gray;
       background: white;
@@ -827,6 +893,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
             class="hidden"
             aria-expanded="true">Notes</button
           >
+          <button id="copy-url" type="button" class="hidden">Copy URL</button>
         </div>
         <div class="notes-content" id="notes-content"></div>
       </div>
