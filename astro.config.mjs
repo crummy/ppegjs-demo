@@ -5,4 +5,9 @@ import { defineConfig } from "astro/config";
 export default defineConfig({
   site: "https://www.malcolmcrum.com/",
   base: process.env.ASTRO_BASE ?? "/ppegjs-demo/",
+  markdown: {
+    shikiConfig: {
+      theme: "github-light",
+    },
+  },
 });

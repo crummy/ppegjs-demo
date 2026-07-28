@@ -55,6 +55,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   const output = getElement<HTMLDivElement>("#output");
   const outputContent = getElement<HTMLDivElement>("#output-content");
   const notes = getElement<HTMLDivElement>("#notes");
+  const notesPreview = getElement<HTMLDivElement>("#notes-preview");
   const notesContent = getElement<HTMLDivElement>("#notes-content");
   const notesToggle = getElement<HTMLButtonElement>("#notes-toggle");
   const copyUrlButton = getElement<HTMLButtonElement>("#copy-url");
@@ -122,6 +123,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     selected
       ? Array.from(examplesSelect.options).find((o) => o.value === selected)
       : undefined;
+
+  const getFirstNotesLine = () =>
+    (notesContent.textContent ?? "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? "";
 
   const defaultSelectedExample =
     Array.from(examplesSelect.options).find(
@@ -237,6 +244,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       );
       notesContent.append(template.content.cloneNode(true));
     }
+    notesPreview.innerText = hasNotes ? getFirstNotesLine() : "";
     notesToggle.classList.toggle("hidden", !hasNotes);
     copyUrlButton.classList.toggle("hidden", !hasScratchUrlControls);
     notesToggle.setAttribute(
@@ -250,7 +258,8 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     );
     notes.classList.toggle("hidden", !hasNotes && !hasScratchUrlControls);
     notes.classList.toggle("collapsed", !State.showNotes);
-    notesContent.classList.toggle("hidden", !State.showNotes);
+    notesPreview.classList.toggle("hidden", State.showNotes || !hasNotes);
+    notesContent.classList.toggle("hidden", !State.showNotes || !hasNotes);
 
     document
       .querySelectorAll(".error-alert")
@@ -582,21 +591,34 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     .notes {
       background: whitesmoke;
       border-bottom: thin solid gray;
-      display: flex;
-      flex-direction: column;
       flex: 0 1 auto;
       line-height: 1.4;
       max-height: 33.333%;
       min-height: 0;
+      overflow-y: auto;
+      padding: 5px 10px;
     }
 
     .notes.collapsed {
+      align-items: center;
+      display: flex;
       flex-basis: auto;
+      gap: 1rem;
+      overflow: hidden;
     }
 
-    .notes-header {
-      padding: 2px 10px;
-      text-align: right;
+    .notes-actions {
+      float: right;
+      display: inline-flex;
+      gap: 0.4rem;
+      margin-left: 1rem;
+    }
+
+    .notes.collapsed .notes-actions {
+      flex: 0 0 auto;
+      float: none;
+      margin-left: 0;
+      order: 2;
     }
 
     #notes-toggle {
@@ -629,12 +651,20 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
       overflow-y: scroll;
     }
 
+    .notes-preview,
     .notes-content {
       font-family: system-ui, sans-serif;
       min-height: 0;
-      overflow-y: auto;
-      padding: 5px 10px;
       white-space: normal;
+    }
+
+    .notes-preview {
+      flex: 1 1 auto;
+      min-width: 0;
+      order: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .notes-content :first-child {
@@ -886,7 +916,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     </div>
     <div class="output-content" id="output-content">
       <div class="notes hidden" id="notes">
-        <div class="notes-header">
+        <div class="notes-actions">
           <button
             id="notes-toggle"
             type="button"
@@ -895,6 +925,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
           >
           <button id="copy-url" type="button" class="hidden">Copy URL</button>
         </div>
+        <div class="notes-preview hidden" id="notes-preview"></div>
         <div class="notes-content" id="notes-content"></div>
       </div>
       <div class="content-container">
