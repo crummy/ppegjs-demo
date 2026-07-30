@@ -160,6 +160,12 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     writeStorage(STORAGE_KEYS.scratchInput, State.inputText);
   };
 
+  const discardSharedScratchPayload = () => {
+    if (State.workspace !== "scratch") return;
+    if (!readUrlState(window.location).scratchPayload) return;
+    writeDemoUrlState();
+  };
+
   const loadScratch = (payload: ScratchPayload | null = null) => {
     updateState({
       workspace: "scratch",
@@ -414,6 +420,7 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
     const commit = (text: string) => {
       updateText(text);
       saveScratch();
+      discardSharedScratchPayload();
       runWithCaret();
     };
 
