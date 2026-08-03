@@ -506,16 +506,27 @@ const initialExample = examples.find((e) => e.highlighted)?.title;
   };
 
   copyUrlButton.addEventListener("click", async () => {
+    let isTooLarge = false;
     try {
-      const scratchUrl = await buildScratchUrl();
-      if (scratchUrl.length > COPY_URL_MAX_LENGTH) {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": buildScratchUrl().then((scratchUrl) => {
+            if (scratchUrl.length > COPY_URL_MAX_LENGTH) {
+              isTooLarge = true;
+              throw new Error("Copy URL is too large");
+            }
+            return new Blob([scratchUrl], { type: "text/plain" });
+          }),
+        }),
+      ]);
+      setCopyUrlButtonText("Copied");
+    } catch (e) {
+      if (isTooLarge) {
         setCopyUrlButtonText("Too large");
         return;
       }
 
-      await navigator.clipboard.writeText(scratchUrl);
-      setCopyUrlButtonText("Copied");
-    } catch {
+      console.error("Failed to copy", e);
       setCopyUrlButtonText("Copy failed");
     }
   });
